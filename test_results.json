@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-02-09T15:48:25.114420",
+  "endpoints_tested": [
+    {
+      "endpoint": "/health",
+      "status_code": 200,
+      "success": true,
+      "screenshot": "screenshots/01_health_check.png",
+      "response_visible": true
+    },
+    {
+      "endpoint": "/docs",
+      "status_code": 200,
+      "success": true,
+      "screenshot": "screenshots/02_swagger_ui.png",
+      "swagger_ui_loaded": true
+    },
+    {
+      "endpoint": "/",
+      "status_code": 200,
+      "success": true,
+      "screenshot": "screenshots/03_root_endpoint.png",
+      "has_content": true
+    }
+  ],
+  "console_errors": [],
+  "overall_status": "PASS"
+}

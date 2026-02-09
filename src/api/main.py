@@ -16,6 +16,9 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Import routers
+from src.api.webhooks import router as webhooks_router
+
 # Version info
 __version__ = "0.1.0"
 
@@ -41,6 +44,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(webhooks_router)
 
 
 # Response models
