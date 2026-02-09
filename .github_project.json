@@ -1,0 +1,23 @@
+{
+  "initialized": true,
+  "created_at": "2026-02-09T22:32:39Z",
+  "repository": "vtggit/CodeAgent",
+  "project_name": "Multi-Agent GitHub Issue Routing System",
+  "meta_issue_number": 2,
+  "total_issues": 50,
+  "default_branch": "main",
+  "project_id": null,
+  "notes": "Project initialized by initializer agent. GitHub repository created with 50 detailed issues covering all system components. Labels need to be created manually (gh CLI not available). Issues #3-#52 created (issue #1 was test, #2 is META tracker).",
+  "issue_range": {
+    "start": 3,
+    "end": 52,
+    "total": 50
+  },
+  "priority_distribution": {
+    "priority-1": 15,
+    "priority-2": 15,
+    "priority-3": 20
+  },
+  "labels_status": "pending_manual_creation",
+  "milestones_status": "pending_manual_creation"
+}
