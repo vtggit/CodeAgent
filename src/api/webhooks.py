@@ -7,7 +7,8 @@ and queues issues for processing by the agent deliberation system.
 
 import json
 import time
-from typing import Any
+import uuid
+from typing import Any, Optional
 from fastapi import APIRouter, Request, Response, Header, HTTPException, status
 from pydantic import BaseModel
 import sys
@@ -17,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.utils.webhook import validate_github_signature, extract_issue_data
+from src.queue.base import BaseQueue, QueueJob
 
 
 # Router for webhook endpoints
@@ -29,10 +31,24 @@ class WebhookResponse(BaseModel):
     status: str
     message: str
     processed_in_ms: float
+    job_id: Optional[str] = None
 
 
-# In-memory queue placeholder (will be replaced with Redis in issue #5)
-_webhook_queue: list[dict[str, Any]] = []
+# Global queue instance (initialized on startup)
+_queue: Optional[BaseQueue] = None
+
+
+def set_queue(queue: BaseQueue) -> None:
+    """Set the global queue instance."""
+    global _queue
+    _queue = queue
+
+
+def get_queue() -> BaseQueue:
+    """Get the global queue instance."""
+    if _queue is None:
+        raise RuntimeError("Queue not initialized. Call set_queue() first.")
+    return _queue
 
 
 @router.post("/github", response_model=WebhookResponse)
@@ -117,16 +133,31 @@ async def github_webhook(
             processed_in_ms=elapsed_ms,
         )
 
-    # Queue for async processing
-    # TODO: Replace with Redis queue in issue #5
-    _webhook_queue.append(
-        {
+    # Queue for async processing using Redis/Memory queue
+    queue = get_queue()
+
+    # Create job
+    job = QueueJob(
+        job_id=str(uuid.uuid4()),
+        job_type="webhook_issue",
+        payload={
             "event_type": x_github_event,
             "action": action,
             "issue_data": issue_data,
             "received_at": time.time(),
-        }
+        },
+        priority=1,  # Default priority
+        max_retries=3,
     )
+
+    # Enqueue job
+    success = await queue.enqueue(job)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to queue webhook for processing",
+        )
 
     # Calculate response time
     elapsed_ms = (time.time() - start_time) * 1000
@@ -135,6 +166,7 @@ async def github_webhook(
         status="queued",
         message=f"Issue #{issue_data['issue_number']} queued for processing",
         processed_in_ms=elapsed_ms,
+        job_id=job.job_id,
     )
 
 
@@ -143,13 +175,16 @@ async def queue_status() -> dict[str, Any]:
     """
     Get current queue status (development endpoint).
 
-    This is a temporary endpoint for testing. Will be removed
-    when proper queue monitoring is implemented.
+    Returns queue depth, dead letter count, and health status.
 
     Returns:
         Dictionary with queue statistics
     """
+    queue = get_queue()
+
     return {
-        "queue_length": len(_webhook_queue),
-        "items": _webhook_queue[-10:] if _webhook_queue else [],  # Last 10 items
+        "queue_depth": await queue.get_queue_depth(),
+        "dead_letter_count": await queue.get_dead_letter_count(),
+        "healthy": await queue.health_check(),
+        "queue_type": type(queue).__name__,
     }
