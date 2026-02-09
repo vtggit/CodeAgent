@@ -1,0 +1,20 @@
+{
+  "action": "opened",
+  "issue": {
+    "number": 42,
+    "title": "Add dark mode toggle to settings",
+    "body": "We need to implement a dark mode toggle in the settings page for better user experience at night.",
+    "state": "open",
+    "labels": [
+      {"name": "enhancement"},
+      {"name": "ui"}
+    ],
+    "html_url": "https://github.com/test-owner/test-repo/issues/42"
+  },
+  "repository": {
+    "full_name": "test-owner/test-repo"
+  },
+  "sender": {
+    "login": "test-user"
+  }
+}
