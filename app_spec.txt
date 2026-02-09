@@ -1,0 +1,2917 @@
+# Multi-Agent GitHub Issue Routing System
+## Comprehensive Design & Implementation Specification
+
+**Document Version:** 1.0  
+**Date:** February 8, 2026  
+**Status:** Design Complete - Ready for Implementation
+
+---
+
+## Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [System Overview](#system-overview)
+3. [Core Requirements](#core-requirements)
+4. [Architecture Design](#architecture-design)
+5. [Execution Model](#execution-model)
+6. [Technical Stack](#technical-stack)
+7. [Workflow Format Specification](#workflow-format-specification)
+8. [Implementation Details](#implementation-details)
+9. [Agent Specifications](#agent-specifications)
+10. [Moderator Logic](#moderator-logic)
+11. [Deployment Architecture](#deployment-architecture)
+12. [Code Examples](#code-examples)
+13. [Testing Strategy](#testing-strategy)
+14. [Monitoring & Observability](#monitoring--observability)
+15. [Future Enhancements](#future-enhancements)
+
+---
+
+## Executive Summary
+
+### Purpose
+Build an AI-powered system that automatically routes GitHub issues to a swarm of 50+ specialized AI agents who collaboratively analyze, discuss, and provide expert recommendations through a moderated multi-round deliberation process.
+
+### Key Innovation
+Unlike traditional workflow engines (sequential/DAG-based), this system implements a **"Moderated Multi-Agent Discourse"** execution model where agents dynamically determine when to participate, can respond to each other's insights, and naturally converge to consensus without endless rambling.
+
+### Primary Use Case
+When a GitHub issue is created (e.g., "Add dark mode toggle to settings page"):
+1. System automatically identifies relevant expert agents (UI Architect, ADA Expert, Frontend Dev, etc.)
+2. Agents provide initial analysis in parallel updating github comments within the issue(Round 1)
+3. Agents react to each other's comments when insight/dependencies/conflicts emerge (Rounds 2-N)
+4. Moderator detects convergence and concludes discussion
+5. System posts comprehensive recommendation back to GitHub issue
+
+---
+
+## System Overview
+
+### High-Level Flow
+
+```
+GitHub Issue Created
+        ↓
+  Webhook Received
+        ↓
+  Moderator Selects Relevant Agents (AI-powered)
+        ↓
+╔═══════════════════════════════════════════╗
+║     ROUND-BASED DELIBERATION LOOP         ║
+╠═══════════════════════════════════════════╣
+║  Round N:                                 ║
+║    • All agents evaluate conversation     ║
+║    • Agents decide: Comment or Stay Silent║
+║    • Parallel execution of all comments   ║
+║    • Add comments to conversation history ║
+║                                           ║
+║  Convergence Check:                       ║
+║    • Measure agreement level              ║
+║    • Detect rambling/repetition           ║
+║    • Calculate value added                ║
+║    • Check if discussion is productive    ║
+║                                           ║
+║  Continue? → Yes: Next Round              ║
+║            → No: Exit Loop                ║
+╚═══════════════════════════════════════════╝
+        ↓
+  Moderator Synthesizes Final Recommendations
+        ↓
+  Post Summary to GitHub Issue
+        ↓
+  Store Workflow Visualization Data
+```
+
+### System Components
+
+1. **Webhook Handler** - Receives GitHub events
+2. **Moderator Agent** - Meta-agent that orchestrates discussion
+3. **Specialist Agents (50+)** - Domain experts in narrow areas
+4. **Orchestration Engine** - Manages round-based execution
+5. **Convergence Detector** - Determines when to conclude
+6. **Visualization Generator** - Creates workflow diagrams
+7. **GitHub Integration** - Posts results back to issues
+
+---
+
+## Core Requirements
+
+### Functional Requirements
+
+1. **Multi-Agent Support**
+   - Support 50+ specialized agents with narrow expertise domains
+   - Each agent independently decides when to participate
+   - Agents can reference and respond to other agents' comments
+
+2. **Dynamic Interaction**
+   - Agents engage in unpredictable, emergent conversation patterns
+   - Cross-domain dependencies discovered organically (e.g., ADA agent affects UI architect's decisions)
+   - No predetermined conversation flow
+
+3. **Convergence Without Rambling**
+   - Automatic detection of consensus/convergence
+   - Prevention of circular arguments and repetition
+   - Natural conclusion when discussion plateaus
+   - Safety limits to prevent infinite loops
+
+4. **Workflow Visualization**
+   - Generate visual representation of agent interactions
+   - Show conversation flow and dependencies
+   - Track which agents contributed and when
+   - Display convergence metrics
+
+5. **AI-Generated Workflows**
+   - Use AI to determine which agents are relevant for each issue
+   - AI evaluates agent participation in the conversation
+   - AI evaluates the flow of the conversation
+   - When a human comment is made, AI ensures the conversation and agents have addressed the comment appropriately.
+   - AI synthesizes final recommendations
+
+### Non-Functional Requirements
+
+1. **Performance**
+   - Webhook response < 200ms
+   - Handle concurrent issue processing
+   - Complete typical deliberation in < 60 minutes
+
+2. **Scalability**
+   - Support multiple concurrent deliberations
+   - Scale agent pool to 100+ if needed
+   - Handle high webhook volume
+
+3. **Reliability**
+   - Graceful handling of agent failures
+   - State persistence for long-running deliberations
+   - Recovery from crashes mid-deliberation
+
+4. **Observability**
+   - Real-time deliberation status
+   - Reading real-time comments on GitHub reveals conversation.
+   - Metrics on agent participation rates
+   - Convergence speed analytics
+   - Cost tracking for API calls
+
+---
+
+## Architecture Design
+
+### System Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    GitHub Repository                        │
+└────────────────────────┬────────────────────────────────────┘
+                         │ Webhook (Issue Created/Updated)
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Webhook Handler (FastAPI)                      │
+│  • Validates GitHub signature                               │
+│  • Quick 200 OK response                                    │
+│  • Queues issue for processing                              │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│           Message Queue (Redis/RabbitMQ/SQS)                │
+│  • Decouples webhook from processing                        │
+│  • Enables async processing                                 │
+│  • Provides retry mechanism                                 │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│         Multi-Agent Deliberation Orchestrator               │
+│                                                             │
+│  ┌────────────────────────────────────────────────┐         │
+│  │          Moderator Agent (Claude Agent SDK)          │         │
+│  │  • Selects relevant agents                     │         │
+│  │  • Detects convergence                         │         │
+│  │  • Synthesizes recommendations                 │         │
+│  └────────────────────────────────────────────────┘         │
+│                         │                                   │
+│           ┌─────────────┴─────────────┐                     │
+│           │                           │                     │
+│  ┌────────▼────────┐         ┌───────▼────────┐             │
+│  │  Round Executor  │        │ State Manager    │            │
+│  │  • Parallel agent│        │ • Track progress │           │
+│  │    evaluation    │        │ • Persist state  │           │
+│  │  • Collect results│       │ • Enable recovery│          │
+│  └────────┬────────┘         └────────────────┘             │
+│           │                                                 │
+│  ┌────────▼──────────────────────────────────────┐          │
+│  │     Specialist Agent Pool (50+ agents)        │          │
+│  │                                               │          │
+│  │  Architecture:                                  │       │
+│  │  • System Architect  • UI Architect            │       │
+│  │  • Data Architect                              │       │
+│  │                                                 │       │
+│  │  Development:                                   │       │
+│  │  • Frontend Dev     • Backend Dev              │       │
+│  │  • iOS Dev          • Android Dev              │       │
+│  │  • Database Expert                             │       │
+│  │                                                 │       │
+│  │  Quality & Compliance:                          │       │
+│  │  • QA Engineer      • Security Expert          │       │
+│  │  • ADA/Accessibility • Performance Expert      │       │
+│  │  • Privacy Expert                              │       │
+│  │                                                 │       │
+│  │  Domain Specialists:                            │       │
+│  │  • DevOps           • ML Engineer              │       │
+│  │  • Analytics        • API Design Expert        │       │
+│  │                                                 │       │
+│  │  Business:                                      │       │
+│  │  • Product Manager  • UX Researcher            │       │
+│  │  • Tech Writer      • Legal/Compliance         │       │
+│  │                                                 │       │
+│  │  ... 30+ more domain experts                   │       │
+│  └─────────────────────────────────────────────────┘      │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Results & Visualization Layer                   │
+│  • Generate workflow visualization                           │
+│  • Create summary document                                   │
+│  • Post to GitHub issue as comment                          │
+│  • Store in database for analytics                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+```
+Issue Data → Agent Selection → Round Loop → Convergence → Synthesis → GitHub
+     ↓            ↓              ↓             ↓            ↓          ↓
+  Webhook      Moderator      Parallel     Detector    Moderator   Comment
+  Handler        AI           Agents         AI          AI         API
+```
+
+---
+
+## Execution Model
+
+### Round-Based Deliberation with Convergence Detection
+
+This is the core innovation - a hybrid execution model specifically designed for multi-agent collaboration:
+
+**Key Characteristics:**
+1. **Rounds, not steps** - Execution proceeds in discrete rounds
+2. **Parallel agent evaluation** - All agents consider participating simultaneously
+3. **Self-determined participation** - Each agent autonomously decides whether to comment
+4. **Dynamic re-engagement** - Agents can "come back" to comment in later rounds
+5. **Intelligent termination** - Multiple convergence criteria prevent endless discussion
+
+### Execution Phases
+
+#### Phase 1: Agent Selection
+```
+Input: GitHub Issue
+Process: Moderator analyzes issue and selects relevant agents
+Output: List of participating agents (typically 5-15 from pool of 50+)
+```
+
+#### Phase 2: Round Loop
+```
+For each round (max 20):
+  1. All selected agents receive:
+     - Original issue
+     - Full conversation history
+     - Their own previous comments
+  
+  2. Each agent independently decides:
+     - Should I comment? (yes/no)
+     - If yes: What should I say?
+     - Am I responding to another agent?
+  
+  3. Parallel execution:
+     - All agents who want to comment do so simultaneously
+     - No blocking or sequential constraints
+  
+  4. Collect results:
+     - Gather all comments from this round
+     - Add to conversation history
+  
+  5. Convergence check:
+     - Measure agreement level
+     - Detect rambling
+     - Calculate value added
+     - Decide: continue or stop?
+  
+  If should_continue == False:
+    Break loop
+```
+
+#### Phase 3: Synthesis
+```
+Input: Full conversation history (all rounds)
+Process: Moderator synthesizes into actionable recommendations
+Output: Structured summary with consensus, conflicts, and recommendations
+```
+
+### Comparison to Other Execution Models
+
+| Model | Description | When to Use | Why Not for This |
+|-------|-------------|-------------|------------------|
+| **Sequential** | Agents run one after another | Linear workflows with clear order | Too rigid - can't handle emergent interactions |
+| **Parallel** | All agents run simultaneously once | Independent tasks | No inter-agent dialogue |
+| **DAG** | Predefined dependencies | Known dependencies upfront | Dependencies discovered during discussion |
+| **Message Queue** | Async agent communication | Decoupled systems | No natural stopping point |
+| **Round-Based Deliberation** | Multiple rounds with convergence detection | Multi-agent collaboration with emergence | ✅ **Perfect fit** |
+
+---
+
+## Technical Stack
+
+### Recommended Stack (Python-based)
+
+**Core Framework:**
+- **Python 3.11+** - Main language
+- **FastAPI** - Webhook server and API
+- **Uvicorn** - ASGI server
+- **Pydantic** - Data validation and workflow schemas
+
+**AI/Agent Layer:**
+- **LiteLLM** - Unified interface for 100+ LLM providers
+- **Claude Agent SDK (Python)** - `claude-agent-sdk` (formerly “Claude Code SDK”) for Claude Code-style tool use (file edits, shell, MCP). Requires the Claude Code CLI (`@anthropic-ai/claude-code`) and `ANTHROPIC_API_KEY`.
+- **OpenAI Python SDK** - OpenAI/Azure OpenAI integration
+- **Custom LLM Client** - LM Studio on local network support
+- **asyncio** - Async agent execution
+- **aiohttp** - Async HTTP requests
+
+**Data & State Management:**
+- **sqlite** - Workflow state persistence
+- **Redis** - Message queue and caching
+- **SQLAlchemy** - ORM
+- **Alembic** - Database migrations
+
+**GitHub Integration:**
+- **PyGithub** - GitHub API client
+- **python-dotenv** - Configuration management
+
+**Monitoring & Observability:**
+- **Prometheus** - Metrics
+- **Grafana** - Dashboards
+- **Sentry** - Error tracking
+- **Structlog** - Structured logging
+
+**Visualization:**
+- **Mermaid** - Workflow diagram generation
+- **React Flow** (optional) - Interactive web visualization
+
+**Deployment:**
+- **Docker** - Containerization
+- **Docker Compose** - Local development
+- **GitHub Actions** - CI/CD
+
+### Multi-LLM Support Architecture
+
+**LLM Provider Abstraction:**
+The system supports multiple LLM providers through a unified interface:
+
+```python
+# Supported Providers:
+- Claude (Anthropic)
+- GPT-4 (OpenAI)
+- Local LM Studio models
+- Ollama
+- Any OpenAI-compatible API
+```
+
+**Agent-Level LLM Configuration:**
+Each agent can use a different LLM based on:
+- Task complexity (simple tasks → local LLM, complex → Claude)
+- Cost optimization (use cheaper models when possible)
+- Privacy requirements (sensitive data → local LLM)
+- Performance needs (latency vs quality trade-offs)
+
+**Example Configuration:**
+```yaml
+agents:
+  ui_architect:
+    llm_provider: anthropic
+    model: claude-sonnet-4-5-20250929
+  
+  simple_classifier:
+    llm_provider: lm_studio
+    model: qwen/qwen3-coder-next
+    base_url: http://10.1.1.58:1234/v1
+  
+  code_reviewer:
+    llm_provider: openai
+    model: gpt-4-turbo
+  
+  cost_optimizer:
+    llm_provider: lm_studio
+    model: mistral-7b-instruct
+    base_url: http://10.1.1.58:1234/v1
+```
+
+**Load Balancing Strategy:**
+```python
+# Intelligent routing based on:
+- Task complexity → Complex tasks to Claude/GPT-4
+- Cost constraints → Simple tasks to local LLM
+- Latency requirements → Local LLM for real-time
+- Privacy level → Sensitive data stays local
+```
+
+## Workflow Format Specification
+
+### Workflow Schema (JSON)
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MultiAgentDeliberationWorkflow",
+  "type": "object",
+  "required": ["workflow_id", "trigger", "agents", "execution"],
+  "properties": {
+    "workflow_schema_version": {
+      "type": "string",
+      "default": "1.0"
+    },
+    "workflow_id": {
+      "type": "string",
+      "description": "Unique identifier for this workflow"
+    },
+    "trigger": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["github_issue", "github_pr", "manual"]
+        },
+        "repo": {
+          "type": "string",
+          "pattern": "^[^/]+/[^/]+$"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["opened", "labeled", "edited", "closed"]
+          }
+        }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "description": "Map of agent_name to agent configuration",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["claude_sdk_text", "claude_sdk_code", "github_api", "custom"]
+          },
+          "expertise": {
+            "type": "string"
+          },
+          "domain_knowledge": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["round_based_deliberation"]
+        },
+        "max_rounds": {
+          "type": "integer",
+          "default": 10
+        },
+        "convergence_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.8
+        },
+        "timeout_minutes": {
+          "type": "integer",
+          "default": 60
+        }
+      }
+    }
+  }
+}
+```
+
+### Example Workflow Definition
+
+```json
+{
+  "workflow_schema_version": "1.0",
+  "workflow_id": "github-issue-deliberation",
+  "trigger": {
+    "type": "github_issue",
+    "repo": "myorg/myrepo",
+    "events": ["opened", "labeled"]
+  },
+  "agents": {
+    "ui_architect": {
+      "type": "claude_sdk_text",
+      "expertise": "User interface architecture and component design",
+      "domain_knowledge": "Expert in React, Vue, design systems, responsive design, component libraries, accessibility patterns",
+      "model": "claude-sonnet-4-5-20250929"
+    },
+    "ada_expert": {
+      "type": "claude_sdk_text",
+      "expertise": "Web accessibility and ADA compliance",
+      "domain_knowledge": "WCAG 2.1 AA/AAA compliance, ARIA attributes, screen reader compatibility, keyboard navigation, color contrast, focus management",
+      "model": "claude-sonnet-4-5-20250929"
+    },
+    "frontend_dev": {
+      "type": "claude_sdk_code",
+      "expertise": "Frontend implementation",
+      "domain_knowledge": "JavaScript/TypeScript, React hooks, state management, CSS-in-JS, webpack, testing with Jest/RTL",
+      "tools": ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
+    },
+    "security_expert": {
+      "type": "claude_sdk_text",
+      "expertise": "Application security",
+      "domain_knowledge": "OWASP Top 10, XSS prevention, CSRF protection, authentication, authorization, secure coding practices",
+      "model": "claude-sonnet-4-5-20250929"
+    }
+  },
+  "execution": {
+    "mode": "round_based_deliberation",
+    "max_rounds": 10,
+    "convergence_threshold": 0.8,
+    "min_value_threshold": 0.2,
+    "timeout_minutes": 60
+  }
+}
+```
+
+### Workflow Instance (Runtime State)
+
+```json
+{
+  "instance_id": "issue-123-20260208-143022",
+  "workflow_id": "github-issue-deliberation",
+  "status": "running",
+  "github_issue": {
+    "number": 123,
+    "title": "Add dark mode toggle to settings",
+    "body": "Users want ability to switch between light and dark themes...",
+    "labels": ["enhancement", "ui"],
+    "created_at": "2026-02-08T14:30:22Z"
+  },
+  "selected_agents": [
+    "ui_architect",
+    "ada_expert", 
+    "frontend_dev",
+    "ux_designer",
+    "qa_engineer"
+  ],
+  "conversation_history": [
+    {
+      "round": 1,
+      "agent": "ui_architect",
+      "timestamp": "2026-02-08T14:31:05Z",
+      "comment": "Recommend toggle in header with system preference detection...",
+      "references": []
+    },
+    {
+      "round": 1,
+      "agent": "ada_expert",
+      "timestamp": "2026-02-08T14:31:12Z",
+      "comment": "Critical: WCAG requires 4.5:1 contrast ratio in both modes...",
+      "references": []
+    },
+    {
+      "round": 2,
+      "agent": "ada_expert",
+      "timestamp": "2026-02-08T14:32:03Z",
+      "comment": "ui_architect: Your header placement may not be keyboard accessible...",
+      "references": ["ui_architect"]
+    }
+  ],
+  "metrics": {
+    "current_round": 2,
+    "total_comments": 8,
+    "convergence_score": 0.45,
+    "participating_agents": 5,
+    "started_at": "2026-02-08T14:30:55Z",
+    "estimated_completion": "2026-02-08T14:38:00Z"
+  }
+}
+```
+
+---
+
+## Implementation Details
+
+### Project Structure
+
+```
+multi-agent-github-system/
+├── README.md
+├── requirements.txt
+├── pyproject.toml
+├── .env.example
+├── docker-compose.yml
+├── Dockerfile
+│
+├── src/
+│   ├── __init__.py
+│   │
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── webhook_handler.py      # FastAPI webhook endpoints
+│   │   └── routes.py                # Additional API routes
+│   │
+│   ├── orchestration/
+│   │   ├── __init__.py
+│   │   ├── orchestrator.py          # Main orchestration engine
+│   │   ├── moderator.py             # Moderator agent logic
+│   │   ├── convergence.py           # Convergence detection
+│   │   └── state_manager.py         # Workflow state management
+│   │
+│   ├── agents/
+│   │   ├── __init__.py
+│   │   ├── base_agent.py            # Abstract agent class
+│   │   ├── claude_sdk_text_agent.py # Claude Agent SDK (tools disabled) agent
+│   │   ├── claude_sdk_code_agent.py # Claude Agent SDK (tools enabled) coding agent
+│   │   ├── github_agent.py          # GitHub API agent
+│   │   └── agent_registry.py        # Agent registration/lookup
+│   │
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── workflow.py              # Pydantic workflow models
+│   │   ├── agent.py                 # Pydantic agent models
+│   │   └── conversation.py          # Conversation models
+│   │
+│   ├── integrations/
+│   │   ├── __init__.py
+│   │   ├── github_client.py         # GitHub API client
+│   │   ├── claude_agent_sdk_client.py # Shared helper for Claude Agent SDK
+│   │   └── queue_client.py          # Redis/RabbitMQ client
+│   │
+│   ├── visualization/
+│   │   ├── __init__.py
+│   │   ├── mermaid_generator.py     # Generate Mermaid diagrams
+│   │   └── workflow_visualizer.py   # Visualization utilities
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── config.py                # Configuration management
+│       ├── logging.py               # Logging setup
+│       └── metrics.py               # Prometheus metrics
+│
+├── config/
+│   ├── agent_definitions.yaml       # 50+ agent configurations
+│   └── workflow_templates.yaml      # Workflow templates
+│
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── fixtures/
+│
+├── scripts/
+│   ├── deploy.sh
+│   ├── migrate.sh
+│   └── seed_agents.py
+│
+└── docs/
+    ├── API.md
+    ├── AGENTS.md
+    └── DEPLOYMENT.md
+```
+
+### Core Classes
+
+#### 1. Multi-Agent Orchestrator
+
+```python
+# src/orchestration/orchestrator.py
+
+from typing import Dict, List, Any
+import asyncio
+from datetime import datetime
+
+from src.agents.base_agent import BaseAgent
+from src.orchestration.moderator import ModeratorAgent, ContinueDecision
+from src.models.workflow import WorkflowInstance, Comment
+
+
+class MultiAgentDeliberationOrchestrator:
+    """Main orchestration engine for round-based multi-agent deliberation."""
+
+    def __init__(self):
+        self.agents: Dict[str, BaseAgent] = {}
+        self.moderator = ModeratorAgent()
+        self.max_rounds = 10
+
+    def register_agent(self, agent: BaseAgent):
+        """Register an agent in the pool"""
+        self.agents[agent.name] = agent
+
+    async def deliberate_on_issue(self, workflow_instance: WorkflowInstance) -> Dict[str, Any]:
+        """
+        Main deliberation loop - coordinates multi-round agent discussion.
+
+        Returns:
+            Complete deliberation results with conversation history and summary
+        """
+        issue = workflow_instance.github_issue
+
+        # Phase 1: Agent Selection
+        relevant_agents = await self.moderator.select_relevant_agents(
+            issue=issue,
+            all_agents=self.agents,
+            workflow_config=workflow_instance.config,
+        )
+
+        workflow_instance.selected_agents = [a.name for a in relevant_agents]
+        conversation_history: list[Comment] = []
+
+        # Phase 2: Round-Based Deliberation
+        round_num = 1
+        final_decision: ContinueDecision | None = None
+
+        while round_num <= self.max_rounds:
+            print(f"
+{'=' * 60}")
+            print(f"Round {round_num}")
+            print(f"{'=' * 60}")
+
+            round_comments = await self._execute_round(
+                agents=relevant_agents,
+                issue=issue,
+                history=conversation_history,
+                round_num=round_num,
+            )
+
+            conversation_history.extend(round_comments)
+
+            # Update workflow state
+            workflow_instance.current_round = round_num
+            workflow_instance.conversation_history = conversation_history
+            await self._persist_state(workflow_instance)
+
+            # Phase 3: Convergence Check
+            final_decision = await self.moderator.should_continue_deliberation(
+                round_num=round_num,
+                round_comments=round_comments,
+                full_history=conversation_history,
+                config=workflow_instance.config,
+            )
+
+            if not final_decision.should_continue:
+                print(f"
+Deliberation concluded after {round_num} rounds")
+                print(f"Reason: {final_decision.reason}")
+                break
+
+            round_num += 1
+
+        # Defensive fallback (shouldn't happen if ModeratorAgent always returns a decision)
+        if final_decision is None:
+            final_decision = ContinueDecision(
+                should_continue=False,
+                reason="No decision returned by moderator",
+                convergence_score=0.0,
+                rambling_detected=False,
+                value_trend="unknown",
+            )
+
+        # Phase 4: Synthesis
+        final_summary = await self.moderator.synthesize_recommendations(
+            conversation_history=conversation_history,
+            issue=issue,
+        )
+
+        return {
+            "workflow_instance_id": workflow_instance.instance_id,
+            "rounds_completed": round_num,
+            "total_comments": len(conversation_history),
+            "participating_agents": len(relevant_agents),
+            "conversation": conversation_history,
+            "summary": final_summary,
+            "convergence_metrics": {
+                "final_convergence_score": final_decision.convergence_score,
+                "rambling_detected": final_decision.rambling_detected,
+                "value_trend": final_decision.value_trend,
+                "stop_reason": final_decision.reason,
+            },
+        }
+
+    async def _execute_round(
+        self,
+        agents: List[BaseAgent],
+        issue: Dict,
+        history: List[Comment],
+        round_num: int,
+    ) -> List[Comment]:
+        """Execute one round - all agents consider commenting in parallel."""
+        tasks = [self._agent_consider_comment(agent, issue, history, round_num) for agent in agents]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        comments: list[Comment] = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                print(f"⚠️  Agent {agents[i].name} encountered error: {result}")
+                continue
+            if result is not None:
+                comments.append(result)
+
+        print(f"
+{len(comments)} agents commented this round")
+        for comment in comments:
+            print(f"  ✓ {comment.agent}")
+
+        return comments
+
+    async def _agent_consider_comment(
+        self,
+        agent: BaseAgent,
+        issue: Dict,
+        history: List[Comment],
+        round_num: int,
+    ) -> Comment | None:
+        """Have an agent evaluate whether to comment this round."""
+        # Agent decides: should I comment?
+        decision = await agent.should_comment(issue=issue, conversation_history=history)
+
+        if not decision.should_comment:
+            return None
+
+        # Agent generates comment
+        comment_text = await agent.generate_comment(issue=issue, history=history, reason=decision.reason)
+
+        return Comment(
+            round=round_num,
+            agent=agent.name,
+            comment=comment_text,
+            references=decision.responding_to or [],
+            timestamp=datetime.utcnow(),
+        )
+
+    async def _persist_state(self, workflow_instance: WorkflowInstance):
+        """Persist workflow state for recovery"""
+        # Implementation depends on your database choice
+        pass
+```
+
+#### 2. Moderator Agent
+
+```python
+# src/orchestration/moderator.py
+
+from __future__ import annotations
+
+from typing import List, Dict, Any
+from dataclasses import dataclass
+import json
+import os
+
+from claude_agent_sdk import (
+    query,
+    ClaudeAgentOptions,
+    AssistantMessage,
+    TextBlock,
+    ResultMessage,
+)
+
+from src.agents.base_agent import BaseAgent
+
+
+@dataclass
+class ContinueDecision:
+    """Result of should_continue_deliberation check"""
+    should_continue: bool
+    reason: str
+    convergence_score: float
+    rambling_detected: bool
+    value_trend: str
+
+
+class ModeratorAgent:
+    """
+    Meta-agent that manages the deliberation process.
+    Responsibilities:
+    - Select relevant agents for an issue
+    - Detect convergence
+    - Prevent rambling
+    - Synthesize final recommendations
+
+    NOTE: This uses the Claude *Agent SDK* (formerly “Claude Code SDK”).
+    It does NOT call the Claude API directly via `anthropic.messages.create`.
+    """
+
+    def __init__(self, model: str | None = None):
+        # Keep the spec's existing env var name for convenience
+        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+
+    async def _query_text(self, prompt: str, *, system_prompt: str | None = None) -> str:
+        """Simple text query with tools disabled."""
+        options = ClaudeAgentOptions(
+            model=self.model,
+            max_turns=1,
+            tools=[],              # disable tools
+            allowed_tools=[],      # explicit allowlist (empty)
+            system_prompt=system_prompt,
+        )
+
+        chunks: list[str] = []
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        chunks.append(block.text)
+
+        return "".join(chunks).strip()
+
+    async def _query_structured(self, prompt: str, *, schema: dict, system_prompt: str | None = None) -> Any:
+        """Structured query using JSON Schema validation."""
+        options = ClaudeAgentOptions(
+            model=self.model,
+            max_turns=1,
+            tools=[],
+            allowed_tools=[],
+            system_prompt=system_prompt,
+            output_format={"type": "json_schema", "schema": schema},
+        )
+
+        last_result: ResultMessage | None = None
+        chunks: list[str] = []
+
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        chunks.append(block.text)
+            elif isinstance(message, ResultMessage):
+                last_result = message
+
+        # Preferred path: SDK gives you validated structured output
+        if last_result and last_result.structured_output is not None:
+            return last_result.structured_output
+
+        # Fallback path: try to parse whatever text came back
+        raw = "".join(chunks).strip()
+        if not raw:
+            raise ValueError("Claude returned no content")
+        return json.loads(raw)
+
+    async def select_relevant_agents(
+        self,
+        issue: Dict,
+        all_agents: Dict[str, BaseAgent],
+        workflow_config: Dict,
+    ) -> List[BaseAgent]:
+        """
+        Analyze issue and select which specialist agents should participate.
+
+        Uses Claude to intelligently match issue to agent expertise.
+        """
+        agent_descriptions = "
+".join([f"- {name}: {agent.expertise}" for name, agent in all_agents.items()])
+
+        prompt = f"""Analyze this GitHub issue and determine which specialist agents are relevant.
+
+Issue Title: {issue['title']}
+Issue Body: {issue['body']}
+Labels: {', '.join(issue.get('labels', []))}
+
+Available agents:
+{agent_descriptions}
+
+Consider:
+1. Direct relevance (obviously needed)
+2. Secondary impacts (might be affected)
+3. Compliance requirements (security, accessibility, privacy)
+4. Typical team composition for this type of work
+
+Return ONLY a JSON array of agent names, ordered by relevance.
+Select 5–15 agents. Include all critical perspectives.
+"""
+
+        selected_names: list[str] = await self._query_structured(
+            prompt,
+            schema={"type": "array", "items": {"type": "string"}},
+            system_prompt="You are a careful router. Output only valid JSON that matches the requested schema.",
+        )
+
+        return [all_agents[name] for name in selected_names if name in all_agents]
+
+    async def should_continue_deliberation(
+        self,
+        round_num: int,
+        round_comments: List,
+        full_history: List,
+        config: Dict,
+    ) -> ContinueDecision:
+        """
+        Decide whether another round is needed.
+
+        Multiple stopping criteria:
+        1. No new comments (natural conclusion)
+        2. High convergence score
+        3. Rambling detected
+        4. Diminishing returns
+        5. Safety limit reached
+        """
+        # Criterion 1: No comments = done
+        if len(round_comments) == 0:
+            return ContinueDecision(
+                should_continue=False,
+                reason="No agents commented - discussion naturally concluded",
+                convergence_score=1.0,
+                rambling_detected=False,
+                value_trend="converged",
+            )
+
+        # Criterion 2: Convergence detection
+        convergence_score = await self._measure_convergence(full_history)
+        convergence_threshold = float(config.get("convergence_threshold", 0.8))
+
+        if convergence_score > convergence_threshold:
+            return ContinueDecision(
+                should_continue=False,
+                reason=f"High convergence detected ({convergence_score:.2f})",
+                convergence_score=convergence_score,
+                rambling_detected=False,
+                value_trend="converged",
+            )
+
+        # Criterion 3: Rambling detection
+        is_rambling = await self._detect_rambling(round_comments, full_history)
+        if is_rambling:
+            return ContinueDecision(
+                should_continue=False,
+                reason="Rambling/repetition detected - terminating discussion",
+                convergence_score=convergence_score,
+                rambling_detected=True,
+                value_trend="declining",
+            )
+
+        # Criterion 4: Diminishing returns
+        value_added = await self._measure_value_added(round_comments)
+        min_value = float(config.get("min_value_threshold", 0.2))
+
+        if value_added < min_value:
+            return ContinueDecision(
+                should_continue=False,
+                reason=f"Low value added ({value_added:.2f}) - discussion plateaued",
+                convergence_score=convergence_score,
+                rambling_detected=False,
+                value_trend="plateaued",
+            )
+
+        # Criterion 5: Safety limit
+        max_rounds = int(config.get("max_rounds", 10))
+        if round_num >= max_rounds:
+            return ContinueDecision(
+                should_continue=False,
+                reason=f"Maximum rounds ({max_rounds}) reached",
+                convergence_score=convergence_score,
+                rambling_detected=False,
+                value_trend="limited",
+            )
+
+        # Continue to next round
+        return ContinueDecision(
+            should_continue=True,
+            reason="Discussion is productive - continuing",
+            convergence_score=convergence_score,
+            rambling_detected=False,
+            value_trend="productive",
+        )
+
+    async def _measure_convergence(self, history: List) -> float:
+        """Measure consensus level from 0.0 (divergent) to 1.0 (consensus)."""
+        if len(history) < 2:
+            return 0.0
+
+        recent = history[-10:]
+        comments_text = "
+
+".join([f"{c.agent}: {c.comment}" for c in recent])
+
+        prompt = f"""Analyze convergence in this multi-agent discussion.
+
+Recent comments:
+{comments_text}
+
+Return a number between 0.0 and 1.0.
+"""
+
+        score = await self._query_structured(
+            prompt,
+            schema={"type": "number", "minimum": 0.0, "maximum": 1.0},
+            system_prompt="Return only a JSON number that matches the schema.",
+        )
+        return float(score)
+
+    async def _detect_rambling(self, round_comments: List, full_history: List) -> bool:
+        """Detect if conversation is becoming unproductive."""
+        if len(round_comments) == 0:
+            return False
+
+        recent_text = "
+
+".join([f"{c.agent}: {c.comment}" for c in round_comments])
+        context_text = "
+
+".join([f"{c.agent}: {c.comment}" for c in full_history[-20:]])
+
+        prompt = f"""Analyze if this discussion is rambling or staying productive.
+
+Latest round:
+{recent_text}
+
+Previous context:
+{context_text}
+
+Return true if it's rambling, false otherwise.
+"""
+
+        is_rambling = await self._query_structured(
+            prompt,
+            schema={"type": "boolean"},
+            system_prompt="Return only a JSON boolean that matches the schema.",
+        )
+        return bool(is_rambling)
+
+    async def _measure_value_added(self, round_comments: List) -> float:
+        """Score the value of new information from 0.0 to 1.0."""
+        if not round_comments:
+            return 0.0
+
+        comments_text = "
+
+".join([f"{c.agent}: {c.comment}" for c in round_comments])
+
+        prompt = f"""Rate the value added by these comments from 0.0 to 1.0.
+
+{comments_text}
+
+Return a number between 0.0 and 1.0.
+"""
+
+        score = await self._query_structured(
+            prompt,
+            schema={"type": "number", "minimum": 0.0, "maximum": 1.0},
+            system_prompt="Return only a JSON number that matches the schema.",
+        )
+        return float(score)
+
+    async def synthesize_recommendations(self, conversation_history: List, issue: Dict) -> str:
+        """Create final summary from full multi-agent discussion."""
+        conversation_text = "
+
+".join(
+            [f"**Round {c.round} - {c.agent}:**
+{c.comment}" for c in conversation_history]
+        )
+
+        prompt = f"""Synthesize this multi-agent discussion into actionable recommendations.
+
+Original Issue:
+Title: {issue['title']}
+{issue['body']}
+
+Full Discussion:
+{conversation_text}
+
+Provide a comprehensive summary with:
+
+## Consensus
+What all agents agree on
+
+## Key Conflicts & Trade-offs
+Important disagreements or competing priorities identified
+
+## Recommended Approach
+The best path forward with rationale
+
+## Domain Considerations
+Important points by area (security, accessibility, performance, etc.)
+
+## Open Questions
+Issues requiring human decision or further investigation
+
+## Implementation Estimate
+Rough complexity and timeline based on agent input
+"""
+
+        return await self._query_text(prompt)
+```
+
+#### 3. Base Agent Class
+
+```python
+# src/agents/base_agent.py
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import List, Dict, Any, Optional
+
+@dataclass
+class CommentDecision:
+    """Agent's decision about whether to comment"""
+    should_comment: bool
+    reason: str
+    responding_to: Optional[List[str]] = None
+
+class BaseAgent(ABC):
+    """
+    Abstract base class for all specialist agents.
+    
+    Each agent must implement:
+    - should_comment: Decide whether to participate this round
+    - generate_comment: Create substantive comment
+    """
+    
+    def __init__(
+        self, 
+        name: str, 
+        expertise: str, 
+        domain_knowledge: str,
+        config: Dict[str, Any] = None
+    ):
+        self.name = name
+        self.expertise = expertise
+        self.domain_knowledge = domain_knowledge
+        self.config = config or {}
+        self.comment_history = []
+    
+    @abstractmethod
+    async def should_comment(
+        self, 
+        issue: Dict, 
+        conversation_history: List
+    ) -> CommentDecision:
+        """
+        Evaluate whether this agent should comment in current round.
+        
+        Args:
+            issue: GitHub issue data
+            conversation_history: All comments so far
+            
+        Returns:
+            CommentDecision with should_comment flag and reason
+        """
+        pass
+    
+    @abstractmethod
+    async def generate_comment(
+        self,
+        issue: Dict,
+        history: List,
+        reason: str
+    ) -> str:
+        """
+        Generate substantive expert comment.
+        
+        Args:
+            issue: GitHub issue data
+            history: Full conversation history
+            reason: Why agent decided to comment
+            
+        Returns:
+            Comment text
+        """
+        pass
+    
+    def _format_discussion(self, comments: List) -> str:
+        """Helper to format conversation history"""
+        if not comments:
+            return "(No previous discussion)"
+        
+        return "\n\n".join([
+            f"**{c.agent}** (Round {c.round}):\n{c.comment}"
+            for c in comments
+        ])
+```
+
+#### 4. Claude Agent SDK (Text-only) Agent Implementation
+
+```python
+# src/agents/claude_sdk_text_agent.py
+
+from __future__ import annotations
+
+from typing import List, Dict, Any
+import json
+import os
+
+from claude_agent_sdk import (
+    query,
+    ClaudeAgentOptions,
+    AssistantMessage,
+    TextBlock,
+    ResultMessage,
+)
+
+from src.agents.base_agent import BaseAgent, CommentDecision
+
+
+class ClaudeSDKTextAgent(BaseAgent):
+    """
+    Text-only specialist agent built on the Claude Agent SDK.
+
+    Tools are disabled for this agent type; it is used for:
+    - domain reasoning
+    - critique
+    - constraints and policy analysis
+    - planning and estimates
+    """
+
+    def __init__(self, name: str, expertise: str, domain_knowledge: str, config: Dict):
+        super().__init__(name, expertise, domain_knowledge, config)
+        self.model = config.get("model") or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+
+    async def _query_text(self, prompt: str, *, system_prompt: str | None = None) -> str:
+        options = ClaudeAgentOptions(
+            model=self.model,
+            max_turns=1,
+            tools=[],
+            allowed_tools=[],
+            system_prompt=system_prompt,
+        )
+        chunks: list[str] = []
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        chunks.append(block.text)
+        return "".join(chunks).strip()
+
+    async def _query_structured(self, prompt: str, *, schema: dict, system_prompt: str | None = None) -> Any:
+        options = ClaudeAgentOptions(
+            model=self.model,
+            max_turns=1,
+            tools=[],
+            allowed_tools=[],
+            system_prompt=system_prompt,
+            output_format={"type": "json_schema", "schema": schema},
+        )
+
+        last_result: ResultMessage | None = None
+        chunks: list[str] = []
+
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        chunks.append(block.text)
+            elif isinstance(message, ResultMessage):
+                last_result = message
+
+        if last_result and last_result.structured_output is not None:
+            return last_result.structured_output
+
+        raw = "".join(chunks).strip()
+        if not raw:
+            raise ValueError("Claude returned no content")
+        return json.loads(raw)
+
+    async def should_comment(self, issue: Dict, conversation_history: List) -> CommentDecision:
+        recent_discussion = conversation_history[-10:] if conversation_history else []
+
+        prompt = f"""You are **{self.name}**, an expert in {self.expertise}.
+
+Your domain expertise:
+{self.domain_knowledge}
+
+GitHub Issue:
+Title: {issue['title']}
+Body: {issue['body']}
+Labels: {', '.join(issue.get('labels', []))}
+
+Recent discussion:
+{self._format_discussion(recent_discussion)}
+
+Your previous comments in this discussion:
+{self._format_discussion([c for c in conversation_history if c.agent == self.name])}
+
+Decision: Should you comment in this round?
+
+If you're not sure you have something valuable to add, stay silent. Quality over quantity.
+"""
+
+        decision = await self._query_structured(
+            prompt,
+            schema={
+                "type": "object",
+                "required": ["should_comment", "reason"],
+                "properties": {
+                    "should_comment": {"type": "boolean"},
+                    "reason": {"type": "string"},
+                    "responding_to": {"type": "array", "items": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            },
+            system_prompt="Return only valid JSON matching the schema.",
+        )
+
+        return CommentDecision(
+            should_comment=bool(decision["should_comment"]),
+            reason=str(decision["reason"]),
+            responding_to=decision.get("responding_to"),
+        )
+
+    async def generate_comment(self, issue: Dict, history: List, reason: str) -> str:
+        prompt = f"""You are **{self.name}**, expert in {self.expertise}.
+
+Domain expertise:
+{self.domain_knowledge}
+
+You decided to comment because: {reason}
+
+GitHub Issue:
+Title: {issue['title']}
+Body: {issue['body']}
+
+Full discussion so far:
+{self._format_discussion(history)}
+
+Provide your expert perspective:
+
+Guidelines:
+- Be specific and actionable
+- Clearly state any concerns or constraints from your domain
+- If identifying a conflict/dependency with another agent's suggestion, explain clearly and propose solutions
+- Be concise - avoid repeating what's already been said
+- Respect other agents' expertise
+- Focus on what YOU uniquely bring to the discussion
+"""
+
+        comment = await self._query_text(prompt)
+        self.comment_history.append(comment)
+        return comment
+```
+
+---
+
+#### 5. Claude Agent SDK (Coding) Agent Implementation
+
+This agent type can use Claude Code-style tools (filesystem + shell) via the Claude Agent SDK.
+It is intended for agents like `frontend_dev` / `backend_dev` that may need to inspect a repo, suggest patches, run tests, etc.
+
+```python
+# src/agents/claude_sdk_code_agent.py
+
+from __future__ import annotations
+
+from typing import List, Dict, Any
+import json
+import os
+from pathlib import Path
+
+from claude_agent_sdk import (
+    query,
+    ClaudeAgentOptions,
+    AssistantMessage,
+    TextBlock,
+    ResultMessage,
+)
+
+from src.agents.base_agent import BaseAgent, CommentDecision
+
+
+class ClaudeSDKCodeAgent(BaseAgent):
+    """
+    Coding-capable specialist agent built on the Claude Agent SDK.
+
+    Key differences vs ClaudeSDKTextAgent:
+    - Uses Claude Code preset system prompt & tools preset
+    - Allows a restricted tool allowlist (Read/Grep/Glob/Edit/Write/Bash, etc.)
+    - Uses permission_mode to control tool execution behavior
+    """
+
+    def __init__(self, name: str, expertise: str, domain_knowledge: str, config: Dict):
+        super().__init__(name, expertise, domain_knowledge, config)
+
+        self.model = config.get("model") or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+        self.repo_dir = Path(config.get("repo_dir") or os.getenv("REPO_DIR", "/app/repo"))
+
+        # Practical default allowlist for “coding” agents
+        self.allowed_tools = config.get(
+            "allowed_tools",
+            ["Read", "Grep", "Glob", "Edit", "Write", "Bash"],
+        )
+
+        # Options:
+        # - "acceptEdits": auto-approve file edits and commands (good for workers in a sandbox)
+        # - "bypassPermissions": no prompts at all (use only in trusted CI/sandbox)
+        self.permission_mode = config.get("permission_mode", "acceptEdits")
+
+        # By default the SDK doesn't load filesystem settings. If you want CLAUDE.md / .claude settings:
+        self.setting_sources = config.get("setting_sources", ["project"])
+
+    def _base_options(self) -> ClaudeAgentOptions:
+        return ClaudeAgentOptions(
+            model=self.model,
+            max_turns=1,
+            cwd=str(self.repo_dir),
+            permission_mode=self.permission_mode,
+            setting_sources=self.setting_sources,
+
+            # Use Claude Code's built-in tools & system prompt, then append our constraints.
+            tools={"type": "preset", "preset": "claude_code"},
+            system_prompt={
+                "type": "preset",
+                "preset": "claude_code",
+                "append": (
+                    "You are participating in a moderated multi-agent deliberation. "
+                    "Prefer reading the repo to confirm claims. "
+                    "Do not make large changes without stating risks."
+                ),
+            },
+
+            allowed_tools=self.allowed_tools,
+        )
+
+    async def _query_text(self, prompt: str) -> str:
+        options = self._base_options()
+        chunks: list[str] = []
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        chunks.append(block.text)
+        return "".join(chunks).strip()
+
+    async def _query_structured(self, prompt: str, *, schema: dict) -> Any:
+        options = self._base_options()
+        options.output_format = {"type": "json_schema", "schema": schema}  # type: ignore[attr-defined]
+
+        last_result: ResultMessage | None = None
+        chunks: list[str] = []
+
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        chunks.append(block.text)
+            elif isinstance(message, ResultMessage):
+                last_result = message
+
+        if last_result and last_result.structured_output is not None:
+            return last_result.structured_output
+
+        raw = "".join(chunks).strip()
+        if not raw:
+            raise ValueError("Claude returned no content")
+        return json.loads(raw)
+
+    async def should_comment(self, issue: Dict, conversation_history: List) -> CommentDecision:
+        recent_discussion = conversation_history[-10:] if conversation_history else []
+
+        prompt = f"""You are **{self.name}**, an expert in {self.expertise}.
+
+GitHub Issue:
+Title: {issue['title']}
+Body: {issue['body']}
+Labels: {', '.join(issue.get('labels', []))}
+
+Recent discussion:
+{self._format_discussion(recent_discussion)}
+
+If it would help, you may inspect the repository at: {self.repo_dir}
+Decide whether you should comment this round.
+"""
+
+        decision = await self._query_structured(
+            prompt,
+            schema={
+                "type": "object",
+                "required": ["should_comment", "reason"],
+                "properties": {
+                    "should_comment": {"type": "boolean"},
+                    "reason": {"type": "string"},
+                    "responding_to": {"type": "array", "items": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            },
+        )
+
+        return CommentDecision(
+            should_comment=bool(decision["should_comment"]),
+            reason=str(decision["reason"]),
+            responding_to=decision.get("responding_to"),
+        )
+
+    async def generate_comment(self, issue: Dict, history: List, reason: str) -> str:
+        prompt = f"""You are **{self.name}**, a coding-capable expert in {self.expertise}.
+
+You decided to comment because: {reason}
+
+Issue:
+Title: {issue['title']}
+Body: {issue['body']}
+
+Discussion so far:
+{self._format_discussion(history)}
+
+If needed, inspect the repo and cite exact files/lines.
+
+Provide:
+- Root cause / implementation notes
+- Concrete file-level suggestions (paths)
+- Risks + tests to run
+"""
+
+        return await self._query_text(prompt)
+```
+
+Tool naming note: the `allowed_tools` values above are the Claude Code tool names exposed via the Agent SDK (e.g., `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`). See the Agent SDK docs for the current set.
+
+
+## Agent Specifications
+
+### 50+ Agent Registry
+
+This is a comprehensive list of specialist agents. Each has narrow, deep expertise:
+
+```yaml
+# config/agent_definitions.yaml
+
+agents:
+  # ============= ARCHITECTURE & DESIGN =============
+  
+  system_architect:
+    type: claude_sdk_text
+    expertise: "System architecture and high-level design"
+    domain_knowledge: |
+      Expert in: Microservices vs monoliths, scalability patterns, system boundaries,
+      service communication, data flow, architectural trade-offs, technical debt management,
+      evolutionary architecture, domain-driven design.
+    
+  ui_architect:
+    type: claude_sdk_text
+    expertise: "User interface architecture and component design"
+    domain_knowledge: |
+      Expert in: Component architecture, design systems, atomic design, responsive design,
+      CSS architecture (BEM, CSS-in-JS), state management patterns, reusable components,
+      theming systems, design tokens.
+  
+  data_architect:
+    type: claude_sdk_text
+    expertise: "Database design and data modeling"
+    domain_knowledge: |
+      Expert in: Data modeling (relational, document, graph), normalization, indexing strategies,
+      query optimization, data migration, ETL pipelines, data warehousing, OLTP vs OLAP.
+  
+  api_architect:
+    type: claude_sdk_text
+    expertise: "API design and REST/GraphQL architecture"
+    domain_knowledge: |
+      Expert in: RESTful design, GraphQL schemas, API versioning, rate limiting,
+      authentication/authorization patterns, API documentation (OpenAPI), pagination,
+      error handling, backwards compatibility.
+
+  # ============= DEVELOPMENT =============
+  
+  frontend_dev:
+    type: claude_sdk_code
+    expertise: "Frontend development and implementation"
+    domain_knowledge: |
+      Expert in: React, Vue, Angular, TypeScript, JavaScript ES6+, webpack, Vite,
+      state management (Redux, Zustand), React hooks, component lifecycle,
+      testing (Jest, React Testing Library), CSS frameworks (Tailwind, styled-components).
+    tools: ["edit_files", "run_tests", "terminal", "npm"]
+  
+  backend_dev:
+    type: claude_sdk_code
+    expertise: "Backend development and API implementation"
+    domain_knowledge: |
+      Expert in: Node.js, Python (FastAPI, Django), Go, Java Spring Boot,
+      RESTful APIs, database integration, authentication middleware, logging,
+      error handling, async/await patterns, testing (pytest, Jest).
+    tools: ["edit_files", "run_tests", "terminal", "npm", "pip"]
+  
+  ios_developer:
+    type: claude_sdk_text
+    expertise: "iOS native development"
+    domain_knowledge: |
+      Expert in: Swift, SwiftUI, UIKit, Combine, iOS SDK, Core Data, networking,
+      App Store guidelines, iOS Human Interface Guidelines, performance optimization,
+      memory management, testing (XCTest).
+  
+  android_developer:
+    type: claude_sdk_text
+    expertise: "Android native development"
+    domain_knowledge: |
+      Expert in: Kotlin, Jetpack Compose, Android SDK, Material Design 3,
+      Room database, Retrofit, Coroutines, ViewModel, LiveData, testing (JUnit, Espresso),
+      Google Play policies.
+  
+  database_expert:
+    type: claude_sdk_text
+    expertise: "Database optimization and query performance"
+    domain_knowledge: |
+      Expert in: SQL optimization, index tuning, query plans, EXPLAIN analysis,
+      connection pooling, N+1 query problems, materialized views, partitioning,
+      replication, sharding, database migrations.
+  
+  mobile_web_dev:
+    type: claude_sdk_text
+    expertise: "Progressive Web Apps and mobile web"
+    domain_knowledge: |
+      Expert in: PWA architecture, service workers, offline functionality,
+      mobile-first design, touch interactions, responsive images, web app manifests,
+      mobile performance optimization, viewport configuration.
+
+  # ============= QUALITY & COMPLIANCE =============
+  
+  qa_engineer:
+    type: claude_sdk_text
+    expertise: "Quality assurance and testing strategy"
+    domain_knowledge: |
+      Expert in: Test planning, test case design, unit testing, integration testing,
+      e2e testing (Playwright, Cypress), load testing, regression testing,
+      test automation, bug triage, test coverage analysis, QA best practices.
+  
+  security_expert:
+    type: claude_sdk_text
+    expertise: "Application security and vulnerability assessment"
+    domain_knowledge: |
+      Expert in: OWASP Top 10, XSS prevention, CSRF protection, SQL injection,
+      authentication (OAuth, JWT), authorization (RBAC, ABAC), secure coding practices,
+      dependency scanning, secrets management, security headers, penetration testing.
+  
+  ada_expert:
+    type: claude_sdk_text
+    expertise: "Web accessibility and WCAG compliance"
+    domain_knowledge: |
+      Expert in: WCAG 2.1 Level AA/AAA, Section 508, ARIA attributes, screen reader
+      compatibility (NVDA, JAWS, VoiceOver), keyboard navigation, focus management,
+      color contrast (4.5:1, 7:1), semantic HTML, skip links, accessible forms,
+      testing with axe DevTools.
+  
+  performance_expert:
+    type: claude_sdk_text
+    expertise: "Application performance optimization"
+    domain_knowledge: |
+      Expert in: Core Web Vitals (LCP, FID, CLS), bundle optimization, code splitting,
+      lazy loading, image optimization, caching strategies, CDN configuration,
+      database query optimization, profiling, lighthouse audits, performance budgets.
+  
+  privacy_expert:
+    type: claude_sdk_text
+    expertise: "Data privacy and compliance"
+    domain_knowledge: |
+      Expert in: GDPR, CCPA, data minimization, consent management, cookie policies,
+      data retention, right to deletion, privacy by design, data encryption,
+      anonymization techniques, privacy impact assessments.
+  
+  legal_compliance:
+    type: claude_sdk_text
+    expertise: "Legal compliance and regulatory requirements"
+    domain_knowledge: |
+      Expert in: Terms of Service, Privacy Policy, DMCA, copyright, licensing,
+      age restrictions (COPPA), industry regulations (HIPAA, PCI-DSS, SOC 2),
+      data residency, audit requirements.
+
+  # ============= INFRASTRUCTURE & DEVOPS =============
+  
+  devops_engineer:
+    type: claude_sdk_text
+    expertise: "DevOps practices and CI/CD pipelines"
+    domain_knowledge: |
+      Expert in: CI/CD (GitHub Actions, GitLab CI, Jenkins), Docker, Kubernetes,
+      infrastructure as code (Terraform, CloudFormation), monitoring (Prometheus, Grafana),
+      logging (ELK stack), deployment strategies (blue-green, canary), GitOps.
+  
+  cloud_architect:
+    type: claude_sdk_text
+    expertise: "Cloud infrastructure and architecture"
+    domain_knowledge: |
+      Expert in: AWS, GCP, Azure services, serverless (Lambda, Cloud Functions),
+      load balancing, auto-scaling, disaster recovery, multi-region deployment,
+      cost optimization, cloud security, managed services.
+  
+  sre:
+    type: claude_sdk_text
+    expertise: "Site reliability engineering"
+    domain_knowledge: |
+      Expert in: Service level objectives (SLOs), error budgets, incident response,
+      on-call procedures, post-mortems, monitoring and alerting, capacity planning,
+      reliability patterns, chaos engineering.
+  
+  network_engineer:
+    type: claude_sdk_text
+    expertise: "Network architecture and security"
+    domain_knowledge: |
+      Expert in: VPC design, subnets, firewalls, VPN, DNS, load balancers,
+      CDN configuration, DDoS protection, network security groups, zero trust,
+      service mesh (Istio).
+
+  # ============= DATA & ML =============
+  
+  ml_engineer:
+    type: claude_sdk_text
+    expertise: "Machine learning and model deployment"
+    domain_knowledge: |
+      Expert in: ML model training, feature engineering, model evaluation,
+      deployment strategies, model monitoring, A/B testing, MLOps, TensorFlow,
+      PyTorch, scikit-learn, model versioning.
+  
+  data_engineer:
+    type: claude_sdk_text
+    expertise: "Data pipelines and ETL"
+    domain_knowledge: |
+      Expert in: Data pipeline design, ETL/ELT, Apache Airflow, data warehousing,
+      data lake architecture, streaming (Kafka, Kinesis), data validation,
+      data quality, schema evolution.
+  
+  analytics_expert:
+    type: claude_sdk_text
+    expertise: "Product analytics and instrumentation"
+    domain_knowledge: |
+      Expert in: Event tracking, analytics implementation (Google Analytics, Mixpanel,
+      Amplitude), conversion funnels, A/B testing, cohort analysis, attribution,
+      data visualization, metrics definition.
+  
+  data_scientist:
+    type: claude_sdk_text
+    expertise: "Data analysis and statistical modeling"
+    domain_knowledge: |
+      Expert in: Statistical analysis, hypothesis testing, predictive modeling,
+      time series analysis, clustering, dimensionality reduction, Python (pandas, numpy),
+      R, visualization (matplotlib, seaborn), Jupyter notebooks.
+
+  # ============= BUSINESS & PRODUCT =============
+  
+  product_manager:
+    type: claude_sdk_text
+    expertise: "Product management and requirements"
+    domain_knowledge: |
+      Expert in: Requirements gathering, user stories, acceptance criteria,
+      prioritization frameworks (RICE, MoSCoW), product roadmaps, stakeholder management,
+      feature specifications, success metrics, competitive analysis.
+  
+  ux_researcher:
+    type: claude_sdk_text
+    expertise: "User experience research"
+    domain_knowledge: |
+      Expert in: User interviews, usability testing, surveys, personas, journey mapping,
+      research synthesis, research ethics, quantitative and qualitative methods,
+      accessibility research, inclusive design.
+  
+  ux_designer:
+    type: claude_sdk_text
+    expertise: "User experience and interaction design"
+    domain_knowledge: |
+      Expert in: User flows, wireframes, prototypes, interaction patterns,
+      information architecture, usability heuristics, design thinking,
+      Figma/Sketch, responsive design, micro-interactions.
+  
+  ui_designer:
+    type: claude_sdk_text
+    expertise: "Visual design and UI aesthetics"
+    domain_knowledge: |
+      Expert in: Visual hierarchy, typography, color theory, layout, iconography,
+      design systems, brand guidelines, design tools (Figma, Adobe XD),
+      animation, design tokens.
+  
+  tech_writer:
+    type: claude_sdk_text
+    expertise: "Technical documentation"
+    domain_knowledge: |
+      Expert in: API documentation, user guides, tutorials, README files,
+      documentation architecture, docs-as-code, Markdown, documentation tools
+      (Docusaurus, GitBook), content strategy, technical editing.
+  
+  content_strategist:
+    type: claude_sdk_text
+    expertise: "Content strategy and information architecture"
+    domain_knowledge: |
+      Expert in: Content modeling, taxonomy, metadata, content governance,
+      SEO strategy, content migration, editorial workflows, voice and tone,
+      localization strategy.
+
+  # ============= SPECIALIZED DOMAINS =============
+  
+  seo_expert:
+    type: claude_sdk_text
+    expertise: "Search engine optimization"
+    domain_knowledge: |
+      Expert in: Technical SEO, meta tags, structured data (schema.org), sitemap,
+      robots.txt, canonical URLs, mobile-first indexing, page speed,
+      Core Web Vitals impact on SEO, crawlability, indexation.
+  
+  i18n_expert:
+    type: claude_sdk_text
+    expertise: "Internationalization and localization"
+    domain_knowledge: |
+      Expert in: i18n frameworks (react-intl, i18next), translation workflows,
+      locale formatting (dates, numbers, currency), RTL support, pluralization,
+      cultural considerations, translation memory, localization testing.
+  
+  payment_systems_expert:
+    type: claude_sdk_text
+    expertise: "Payment processing and financial systems"
+    domain_knowledge: |
+      Expert in: Payment gateway integration (Stripe, PayPal), PCI-DSS compliance,
+      payment security, fraud detection, refunds, webhooks, recurring billing,
+      multi-currency, payment methods (cards, wallets, bank transfers).
+  
+  email_systems_expert:
+    type: claude_sdk_text
+    expertise: "Email systems and deliverability"
+    domain_knowledge: |
+      Expert in: Email service providers (SendGrid, Mailgun), SMTP, SPF/DKIM/DMARC,
+      email templates, deliverability optimization, spam prevention, transactional vs
+      marketing emails, email tracking, unsubscribe handling.
+  
+  search_expert:
+    type: claude_sdk_text
+    expertise: "Search functionality and relevance"
+    domain_knowledge: |
+      Expert in: Full-text search, Elasticsearch, search relevance tuning,
+      faceted search, autocomplete, search analytics, indexing strategies,
+      stemming and lemmatization, synonyms, search ranking.
+  
+  realtime_systems_expert:
+    type: claude_sdk_text
+    expertise: "Real-time systems and WebSockets"
+    domain_knowledge: |
+      Expert in: WebSockets, Server-Sent Events, real-time protocols,
+      pub/sub patterns, message brokers (Redis, RabbitMQ), connection management,
+      scaling real-time systems, conflict resolution, eventual consistency.
+  
+  video_systems_expert:
+    type: claude_sdk_text
+    expertise: "Video processing and streaming"
+    domain_knowledge: |
+      Expert in: Video encoding, HLS/DASH streaming, adaptive bitrate,
+      CDN video delivery, video player implementation, thumbnails, transcoding,
+      video storage optimization, DRM, live streaming.
+  
+  gaming_expert:
+    type: claude_sdk_text
+    expertise: "Game development and mechanics"
+    domain_knowledge: |
+      Expert in: Game loops, physics engines, collision detection, game state management,
+      multiplayer synchronization, leaderboards, in-game economies, player progression,
+      Unity/Unreal integration (if web-based games).
+  
+  blockchain_expert:
+    type: claude_sdk_text
+    expertise: "Blockchain and Web3 integration"
+    domain_knowledge: |
+      Expert in: Smart contracts, wallet integration (MetaMask), NFTs,
+      gas optimization, blockchain security, Web3.js/ethers.js, IPFS,
+      decentralized storage, token standards (ERC-20, ERC-721).
+  
+  ai_integration_expert:
+    type: claude_sdk_text
+    expertise: "AI/LLM integration and prompt engineering"
+    domain_knowledge: |
+      Expert in: LLM API integration (OpenAI, Anthropic), prompt engineering,
+      RAG (retrieval augmented generation), vector databases, embeddings,
+      AI safety, content moderation, token optimization, streaming responses.
+
+  # ============= ADDITIONAL SPECIALISTS =============
+  
+  form_design_expert:
+    type: claude_sdk_text
+    expertise: "Form design and user input"
+    domain_knowledge: |
+      Expert in: Form UX, validation patterns, error messaging, progressive disclosure,
+      multi-step forms, autocomplete, input masking, accessibility in forms,
+      form analytics, completion rates.
+  
+  notification_expert:
+    type: claude_sdk_text
+    expertise: "Notification systems and user engagement"
+    domain_knowledge: |
+      Expert in: Push notifications, in-app notifications, email notifications,
+      notification preferences, notification grouping, rich notifications,
+      notification frequency management, delivery channels.
+  
+  auth_expert:
+    type: claude_sdk_text
+    expertise: "Authentication and identity management"
+    domain_knowledge: |
+      Expert in: OAuth 2.0, OpenID Connect, SAML, SSO, MFA, passwordless auth,
+      session management, token refresh, PKCE, social login, identity providers
+      (Auth0, Okta), biometric authentication.
+  
+  error_handling_expert:
+    type: claude_sdk_text
+    expertise: "Error handling and resilience"
+    domain_knowledge: |
+      Expert in: Error boundaries, graceful degradation, retry logic,
+      circuit breakers, error reporting (Sentry, Rollbar), user-friendly error messages,
+      fallback UI, offline handling, error recovery strategies.
+  
+  mobile_performance_expert:
+    type: claude_sdk_text
+    expertise: "Mobile app performance optimization"
+    domain_knowledge: |
+      Expert in: Mobile bundle size, lazy loading on mobile, image optimization for mobile,
+      touch responsiveness, battery optimization, network efficiency, app startup time,
+      memory management on mobile.
+```
+
+### Agent Assignment Strategy
+
+The **Moderator** uses intelligent matching to select 5-15 agents per issue:
+
+**Example Issue: "Add dark mode toggle"**
+Selected agents:
+- ✓ UI Architect (direct relevance)
+- ✓ UX Designer (user experience)
+- ✓ Frontend Dev (implementation)
+- ✓ ADA Expert (accessibility compliance)
+- ✓ Performance Expert (potential impact)
+- ✓ Mobile iOS/Android (if app has mobile version)
+- ✓ QA Engineer (testing strategy)
+- ✗ Payment Systems Expert (not relevant)
+- ✗ Video Systems Expert (not relevant)
+
+---
+
+## Moderator Logic
+
+### Convergence Detection Algorithm
+
+```python
+def calculate_convergence_score(conversation_history: List[Comment]) -> float:
+    """
+    Multi-factor convergence scoring.
+    
+    Factors:
+    1. Agreement indicators in text
+    2. Reduction in new topics
+    3. Cross-referencing between agents
+    4. Refinement vs contradiction ratio
+    """
+    
+    # Use Claude to analyze semantic convergence
+    recent_comments = conversation_history[-10:]
+    
+    # Factor 1: Semantic agreement analysis (via Claude)
+    semantic_score = await analyze_semantic_convergence(recent_comments)
+    
+    # Factor 2: Topic diversity reduction
+    topics_current = extract_topics(conversation_history[-5:])
+    topics_previous = extract_topics(conversation_history[-10:-5])
+    topic_score = 1.0 - (len(topics_current - topics_previous) / max(len(topics_current), 1))
+    
+    # Factor 3: Cross-reference density
+    cross_refs = count_cross_references(recent_comments)
+    ref_score = min(cross_refs / 5.0, 1.0)  # Normalize to [0,1]
+    
+    # Factor 4: Refinement ratio
+    refinements = count_refinements(recent_comments)
+    contradictions = count_contradictions(recent_comments)
+    refine_score = refinements / max(refinements + contradictions, 1)
+    
+    # Weighted combination
+    convergence = (
+        0.4 * semantic_score +
+        0.2 * topic_score +
+        0.2 * ref_score +
+        0.2 * refine_score
+    )
+    
+    return convergence
+```
+
+### Rambling Detection Heuristics
+
+```python
+def detect_rambling(round_comments: List[Comment], history: List[Comment]) -> bool:
+    """
+    Multiple heuristics for rambling detection.
+    """
+    
+    # Heuristic 1: Repetition detection
+    if has_high_text_similarity(round_comments, history[-10:]):
+        return True
+    
+    # Heuristic 2: Topic drift
+    if has_topic_drift(round_comments, history):
+        return True
+    
+    # Heuristic 3: Agent self-contradiction
+    if has_self_contradictions(round_comments, history):
+        return True
+    
+    # Heuristic 4: Circular arguments
+    if has_circular_arguments(round_comments, history):
+        return True
+    
+    # Heuristic 5: Claude semantic analysis
+    if await claude_detects_rambling(round_comments, history):
+        return True
+    
+    return False
+
+def has_high_text_similarity(new_comments, old_comments) -> bool:
+    """Check if new comments are too similar to old ones"""
+    from difflib import SequenceMatcher
+    
+    for new in new_comments:
+        for old in old_comments:
+            similarity = SequenceMatcher(None, new.comment, old.comment).ratio()
+            if similarity > 0.7:  # 70% similar
+                return True
+    return False
+```
+
+### Value-Added Measurement
+
+```python
+def measure_value_added(round_comments: List[Comment]) -> float:
+    """
+    Score the value of new information.
+    
+    High value indicators:
+    - New technical constraints identified
+    - Important conflicts discovered
+    - Innovative solutions proposed
+    - Critical edge cases raised
+    
+    Low value indicators:
+    - Rephrasing existing points
+    - Minor clarifications
+    - Tangential discussion
+    """
+    
+    # Extract key indicators
+    indicators = {
+        'new_constraints': count_new_constraints(round_comments),
+        'conflicts_identified': count_conflict_identifications(round_comments),
+        'solutions_proposed': count_solution_proposals(round_comments),
+        'questions_raised': count_questions(round_comments),
+        'agreements_stated': count_agreements(round_comments),
+        'refinements': count_refinements(round_comments)
+    }
+    
+    # High-value actions
+    high_value_score = (
+        indicators['new_constraints'] * 0.3 +
+        indicators['conflicts_identified'] * 0.3 +
+        indicators['solutions_proposed'] * 0.2 +
+        indicators['questions_raised'] * 0.1
+    )
+    
+    # Low-value actions (penalty)
+    low_value_penalty = (
+        indicators['agreements_stated'] * 0.05 +  # Simple agreement adds little
+        0  # Could add more penalties
+    )
+    
+    value = high_value_score - low_value_penalty
+    return min(max(value, 0.0), 1.0)  # Clamp to [0, 1]
+```
+
+---
+
+## Deployment Architecture
+
+### Development Environment
+
+
+> **Claude Agent SDK runtime requirement:** the Python `claude-agent-sdk` shells out to the Claude Code CLI. Your Docker image/host must include:
+> - Node.js (LTS) + npm
+> - Claude Code CLI installed globally: `npm install -g @anthropic-ai/claude-code`
+> - `ANTHROPIC_API_KEY` available in the environment
+
+
+```yaml
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  webhook-server:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://user:pass@postgres:5432/workflows
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+  
+  worker:
+    build: .
+    command: python -m src.worker
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://user:pass@postgres:5432/workflows
+    depends_on:
+      - redis
+      - postgres
+    deploy:
+      replicas: 3  # Multiple workers for parallel processing
+  
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+  
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=workflows
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+  
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+  
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards
+
+volumes:
+  redis-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+```
+
+### Production Deployment (Kubernetes)
+
+```yaml
+# k8s/deployment.yml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webhook-server
+  template:
+    metadata:
+      labels:
+        app: webhook-server
+    spec:
+      containers:
+      - name: webhook-server
+        image: your-registry/multi-agent-system:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: anthropic-key
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: github-token
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator-worker
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: orchestrator-worker
+  template:
+    metadata:
+      labels:
+        app: orchestrator-worker
+    spec:
+      containers:
+      - name: worker
+        image: your-registry/multi-agent-system:latest
+        command: ["python", "-m", "src.worker"]
+        env:
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: anthropic-key
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "3000m"
+```
+
+### Scaling Strategy
+
+**Horizontal Scaling:**
+- Webhook server: 3-5 replicas (handle webhook volume)
+- Orchestrator workers: 5-10 replicas (handle deliberation processing)
+- Scale based on queue depth
+
+**Vertical Scaling:**
+- Each worker needs ~2-4GB RAM for Claude Agent SDK calls
+- CPU: 2-4 cores per worker for parallel agent execution
+
+**Auto-scaling triggers:**
+- Queue depth > 100 messages
+- Average processing time > 5 minutes
+- CPU utilization > 70%
+
+---
+
+## Code Examples
+
+### Complete Webhook Handler
+
+```python
+# src/api/webhook_handler.py
+
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
+import hmac
+import hashlib
+from src.orchestration.orchestrator import MultiAgentDeliberationOrchestrator
+from src.models.workflow import WorkflowInstance
+from src.integrations.queue_client import enqueue_issue
+
+app = FastAPI(title="Multi-Agent GitHub Issue Router")
+
+# GitHub webhook signature validation
+def verify_github_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Verify GitHub webhook signature for security"""
+    expected = 'sha256=' + hmac.new(
+        secret.encode(),
+        payload,
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+@app.post("/webhook/github")
+async def github_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks
+):
+    """
+    GitHub webhook endpoint.
+    
+    Validates signature, responds quickly, queues for async processing.
+    """
+    # Get raw payload for signature verification
+    payload = await request.body()
+    signature = request.headers.get('X-Hub-Signature-256', '')
+    
+    # Verify signature
+    if not verify_github_signature(payload, signature, GITHUB_WEBHOOK_SECRET):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    # Parse JSON
+    data = await request.json()
+    event_type = request.headers.get('X-GitHub-Event')
+    action = data.get('action')
+    
+    # Only process issue events
+    if event_type == 'issues' and action in ['opened', 'labeled']:
+        issue = data['issue']
+        repo = data['repository']['full_name']
+        
+        # Queue for async processing
+        await enqueue_issue({
+            'issue_number': issue['number'],
+            'title': issue['title'],
+            'body': issue['body'],
+            'labels': [l['name'] for l in issue['labels']],
+            'repo': repo,
+            'url': issue['html_url']
+        })
+        
+        return JSONResponse(
+            status_code=202,
+            content={'status': 'queued', 'issue': issue['number']}
+        )
+    
+    return JSONResponse(
+        status_code=200,
+        content={'status': 'ignored', 'event': event_type}
+    )
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for load balancer"""
+    return {"status": "healthy"}
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    from src.utils.metrics import generate_metrics
+    return generate_metrics()
+```
+
+### Queue Worker
+
+```python
+# src/worker.py
+
+import asyncio
+from src.integrations.queue_client import consume_queue
+from src.orchestration.orchestrator import MultiAgentDeliberationOrchestrator
+from src.agents.agent_registry import load_all_agents
+from src.integrations.github_client import post_comment_to_issue
+
+async def process_issue(issue_data: dict):
+    """Process a single issue through deliberation"""
+    
+    print(f"\n{'='*80}")
+    print(f"Processing Issue #{issue_data['issue_number']}: {issue_data['title']}")
+    print(f"{'='*80}\n")
+    
+    # Initialize orchestrator
+    orchestrator = MultiAgentDeliberationOrchestrator()
+    
+    # Load all agents from registry
+    agents = load_all_agents()
+    for agent in agents:
+        orchestrator.register_agent(agent)
+    
+    print(f"Loaded {len(agents)} specialist agents")
+    
+    # Create workflow instance
+    workflow_instance = WorkflowInstance(
+        github_issue=issue_data,
+        config={
+            'max_rounds': 10,
+            'convergence_threshold': 0.8,
+            'min_value_threshold': 0.2
+        }
+    )
+    
+    try:
+        # Run deliberation
+        result = await orchestrator.deliberate_on_issue(workflow_instance)
+        
+        print(f"\n{'='*80}")
+        print("Deliberation Complete!")
+        print(f"Rounds: {result['rounds_completed']}")
+        print(f"Comments: {result['total_comments']}")
+        print(f"Participating agents: {result['participating_agents']}")
+        print(f"{'='*80}\n")
+        
+        # Post summary to GitHub
+        comment = f"""## 🤖 Multi-Agent Analysis Complete
+
+**Deliberation Summary:**
+- Rounds: {result['rounds_completed']}
+- Agents Participated: {result['participating_agents']}
+- Total Comments: {result['total_comments']}
+- Convergence Score: {result['convergence_metrics']['final_convergence_score']:.2f}
+
+---
+
+{result['summary']}
+
+---
+
+<details>
+<summary>View Full Conversation</summary>
+
+{format_conversation_for_github(result['conversation'])}
+
+</details>
+"""
+        
+        await post_comment_to_issue(
+            repo=issue_data['repo'],
+            issue_number=issue_data['issue_number'],
+            comment=comment
+        )
+        
+        print("✓ Posted summary to GitHub issue")
+        
+    except Exception as e:
+        print(f"✗ Error processing issue: {e}")
+        # Post error comment to GitHub
+        await post_comment_to_issue(
+            repo=issue_data['repo'],
+            issue_number=issue_data['issue_number'],
+            comment=f"⚠️ Multi-agent analysis encountered an error: {str(e)}"
+        )
+        raise
+
+def format_conversation_for_github(conversation: List) -> str:
+    """Format conversation history for GitHub markdown"""
+    formatted = []
+    for comment in conversation:
+        formatted.append(
+            f"### Round {comment.round} - {comment.agent}\n\n"
+            f"{comment.comment}\n\n"
+            f"---\n"
+        )
+    return "\n".join(formatted)
+
+async def main():
+    """Worker main loop"""
+    print("🚀 Multi-Agent Worker Starting...")
+    print("Waiting for issues to process...\n")
+    
+    # Consume from queue and process
+    await consume_queue(process_issue)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+```python
+# tests/unit/test_moderator.py
+
+import pytest
+from src.orchestration.moderator import ModeratorAgent
+
+@pytest.mark.asyncio
+async def test_agent_selection():
+    """Test that moderator selects appropriate agents for issue"""
+    moderator = ModeratorAgent()
+    
+    issue = {
+        'title': 'Add dark mode toggle',
+        'body': 'Users want to switch between themes',
+        'labels': ['enhancement', 'ui']
+    }
+    
+    agents = await moderator.select_relevant_agents(issue, all_agents, {})
+    
+    agent_names = [a.name for a in agents]
+    assert 'ui_architect' in agent_names
+    assert 'ada_expert' in agent_names
+    assert 'frontend_dev' in agent_names
+    assert 'payment_systems_expert' not in agent_names  # Irrelevant
+
+@pytest.mark.asyncio
+async def test_convergence_detection():
+    """Test convergence measurement"""
+    moderator = ModeratorAgent()
+    
+    # High convergence scenario
+    high_convergence_history = [
+        Comment(agent="agent1", comment="I agree with the approach"),
+        Comment(agent="agent2", comment="That sounds good to me"),
+        Comment(agent="agent3", comment="Let's proceed with that plan")
+    ]
+    
+    score = await moderator._measure_convergence(high_convergence_history)
+    assert score > 0.7
+    
+    # Low convergence scenario
+    low_convergence_history = [
+        Comment(agent="agent1", comment="We should use approach A"),
+        Comment(agent="agent2", comment="No, approach B is better"),
+        Comment(agent="agent3", comment="I disagree with both")
+    ]
+    
+    score = await moderator._measure_convergence(low_convergence_history)
+    assert score < 0.4
+```
+
+### Integration Tests
+
+```python
+# tests/integration/test_orchestrator.py
+
+import pytest
+from src.orchestration.orchestrator import MultiAgentDeliberationOrchestrator
+
+@pytest.mark.asyncio
+async def test_full_deliberation():
+    """Test complete deliberation flow"""
+    orchestrator = MultiAgentDeliberationOrchestrator()
+    
+    # Register test agents
+    orchestrator.register_agent(create_test_agent("agent1"))
+    orchestrator.register_agent(create_test_agent("agent2"))
+    
+    issue = {
+        'title': 'Test issue',
+        'body': 'Test body',
+        'labels': []
+    }
+    
+    workflow = WorkflowInstance(github_issue=issue, config={})
+    result = await orchestrator.deliberate_on_issue(workflow)
+    
+    assert result['rounds_completed'] > 0
+    assert len(result['conversation']) > 0
+    assert result['summary'] is not None
+```
+
+### End-to-End Tests
+
+```python
+# tests/e2e/test_webhook_to_github.py
+
+import pytest
+import requests
+
+@pytest.mark.e2e
+async def test_issue_processing_e2e():
+    """Test webhook → deliberation → GitHub comment"""
+    
+    # 1. Simulate GitHub webhook
+    webhook_payload = {
+        'action': 'opened',
+        'issue': {
+            'number': 999,
+            'title': 'E2E Test Issue',
+            'body': 'Testing end-to-end flow',
+            'labels': []
+        },
+        'repository': {
+            'full_name': 'test/repo'
+        }
+    }
+    
+    response = requests.post(
+        'http://localhost:8000/webhook/github',
+        json=webhook_payload,
+        headers={'X-GitHub-Event': 'issues'}
+    )
+    
+    assert response.status_code == 202
+    
+    # 2. Wait for processing
+    await asyncio.sleep(30)
+    
+    # 3. Verify comment was posted to GitHub
+    comments = get_issue_comments('test/repo', 999)
+    assert any('Multi-Agent Analysis Complete' in c['body'] for c in comments)
+```
+
+---
+
+## Monitoring & Observability
+
+### Key Metrics
+
+```python
+# src/utils/metrics.py
+
+from prometheus_client import Counter, Histogram, Gauge
+
+# Webhook metrics
+webhook_requests_total = Counter(
+    'webhook_requests_total',
+    'Total webhook requests received',
+    ['event_type', 'action']
+)
+
+# Deliberation metrics
+deliberation_duration = Histogram(
+    'deliberation_duration_seconds',
+    'Time spent in deliberation',
+    buckets=[10, 30, 60, 120, 300, 600]
+)
+
+deliberation_rounds = Histogram(
+    'deliberation_rounds',
+    'Number of rounds per deliberation',
+    buckets=[1, 2, 3, 5, 7, 10]
+)
+
+agent_comments_total = Counter(
+    'agent_comments_total',
+    'Total comments by agent',
+    ['agent_name']
+)
+
+convergence_score_final = Histogram(
+    'convergence_score_final',
+    'Final convergence scores',
+    buckets=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+)
+
+# Queue metrics
+queue_depth = Gauge(
+    'queue_depth',
+    'Current queue depth'
+)
+
+# API cost tracking
+anthropic_api_calls = Counter(
+    'anthropic_api_calls_total',
+    'Total Claude Agent SDK calls',
+    ['model', 'agent']
+)
+
+anthropic_tokens_used = Counter(
+    'anthropic_tokens_used_total',
+    'Total tokens consumed',
+    ['type']  # input/output
+)
+```
+
+### Grafana Dashboard
+
+Key visualizations:
+1. **Deliberation throughput** - Issues processed per hour
+2. **Average round count** - Trend over time
+3. **Convergence distribution** - Histogram of final scores
+4. **Agent participation rates** - Which agents comment most
+5. **API cost tracking** - Tokens used, estimated cost
+6. **Queue health** - Depth, processing lag
+7. **Error rates** - Failed deliberations
+
+---
+
+## Future Enhancements
+
+### Phase 2 Features
+
+1. **Human-in-the-Loop Approval Gates**
+   - Pause deliberation for human review
+   - Allow humans to inject guidance mid-deliberation
+   - Resume with human input incorporated
+
+2. **Agent Performance Analytics**
+   - Track which agents provide highest-value comments
+   - Identify underutilized agents
+   - Optimize agent selection over time with ML
+
+3. **Workflow Templates**
+   - Pre-configured agent sets for common issue types
+   - Template library (bug fix, feature, refactor, etc.)
+   - User-defined templates
+
+4. **Advanced Visualization**
+   - Interactive React Flow diagram
+   - Real-time deliberation viewer
+   - Agent interaction graph
+   - Conversation timeline
+
+5. **Multi-Repository Support**
+   - Coordinate across multiple repos
+   - Share agent insights between projects
+   - Org-level analytics
+
+6. **Custom Agent Creation**
+   - Web UI for defining new agents
+   - Fine-tuned agents with domain-specific training
+   - Agent marketplace/sharing
+
+7. **Integration Expansion**
+   - Slack notifications with deliberation summary
+   - Jira ticket creation from recommendations
+   - Confluence documentation auto-generation
+   - Linear integration
+
+8. **Cost Optimization**
+   - Caching agent decisions
+   - Smaller models for simple decisions
+   - Batch processing optimizations
+
+---
+
+## Appendix
+
+### Environment Variables
+
+```bash
+# .env.example
+
+# Claude Agent SDK / Claude Code (uses ANTHROPIC_API_KEY under the hood)
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+
+# Optional: override Claude Code CLI path if it isn't on PATH
+# CLAUDE_CODE_CLI_PATH=/usr/local/bin/claude
+
+# Optional: load filesystem settings / CLAUDE.md instructions
+# CLAUDE_SETTING_SOURCES=project  # or: user,project,local
+
+# GitHub
+GITHUB_TOKEN=ghp_...
+GITHUB_WEBHOOK_SECRET=your-secret
+GITHUB_REPO=owner/repo
+
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/workflows
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# Application
+ENVIRONMENT=production
+LOG_LEVEL=info
+MAX_ROUNDS=10
+CONVERGENCE_THRESHOLD=0.8
+
+# Monitoring
+SENTRY_DSN=https://...
+PROMETHEUS_PORT=9090
+```
+
+### Installation & Setup
+
+```bash
+# 1. Clone repository
+git clone https://github.com/yourorg/multi-agent-github-system
+cd multi-agent-github-system
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Set up environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# 4. Initialize database
+python scripts/migrate.sh
+
+# 5. Load agent definitions
+python scripts/seed_agents.py
+
+# 6. Start services
+docker-compose up -d
+
+# 7. Configure GitHub webhook
+# Go to GitHub repo → Settings → Webhooks → Add webhook
+# URL: https://your-domain.com/webhook/github
+# Content type: application/json
+# Secret: (use GITHUB_WEBHOOK_SECRET from .env)
+# Events: Issues
+
+# 8. Test
+python -m pytest tests/
+```
+
+---
+
+## Glossary
+
+- **Agent**: Specialist AI with narrow expertise domain
+- **Moderator**: Meta-agent that manages deliberation process
+- **Round**: One cycle where all agents evaluate and potentially comment
+- **Convergence**: Measure of agreement/consensus among agents
+- **Deliberation**: Multi-round agent discussion process
+- **Workflow Instance**: Runtime state of a specific deliberation
+- **Agent Registry**: Configuration of all available specialist agents
+
+---
+
+## Document Change Log
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-02-08 | Initial comprehensive specification |
+
+---
+
+**End of Document**
+
+Total Pages: 35+
+Total Words: ~15,000
+Code Examples: 20+
+Diagrams: 5
