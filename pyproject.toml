@@ -7,7 +7,7 @@ name = "multi-agent-github-router"
 version = "0.1.0"
 description = "AI-powered system that routes GitHub issues to specialized agents for collaborative analysis"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "CodeAgent Team", email = "noreply@github.com"}
@@ -18,6 +18,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Framework :: FastAPI",
@@ -99,7 +100,7 @@ asyncio_mode = "auto"
 
 [tool.black]
 line-length = 100
-target-version = ["py311"]
+target-version = ["py310", "py311"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -117,7 +118,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -137,7 +138,7 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
