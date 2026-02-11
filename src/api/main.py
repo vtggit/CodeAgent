@@ -17,7 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Import routers
-from src.api.webhooks import router as webhooks_router
+from src.api.webhooks import router as webhooks_router, set_queue
+from src.queue.factory import create_queue
 
 # Version info
 __version__ = "0.1.0"
@@ -176,14 +177,19 @@ async def startup_event() -> None:
 
     Performs initialization tasks when the application starts:
     - Loads configuration
+    - Initializes queue (Redis or memory fallback)
     - Initializes database connections
     - Loads agent registry
     - Sets up monitoring
     """
     print(f"Starting Multi-Agent GitHub Router v{__version__}")
+
+    # Initialize queue (Redis preferred, memory fallback)
+    queue = await create_queue(queue_name="multi-agent-jobs", fallback_to_memory=True)
+    set_queue(queue)
+
     # TODO: Add actual startup logic:
     # - Initialize database
-    # - Connect to Redis
     # - Load agent definitions
     # - Initialize monitoring
 
@@ -195,14 +201,23 @@ async def shutdown_event() -> None:
     Application shutdown event handler.
 
     Performs cleanup tasks when the application shuts down:
+    - Closes queue connections
     - Closes database connections
-    - Closes Redis connections
     - Flushes metrics
     """
     print("Shutting down Multi-Agent GitHub Router")
+
+    # Close queue connections
+    from src.api.webhooks import get_queue
+    try:
+        queue = get_queue()
+        await queue.close()
+        print("✓ Queue connections closed")
+    except Exception as e:
+        print(f"⚠ Error closing queue: {e}")
+
     # TODO: Add actual shutdown logic:
     # - Close database connections
-    # - Close Redis connections
     # - Flush monitoring metrics
 
 
