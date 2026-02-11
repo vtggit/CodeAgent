@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # Import routers
 from src.api.webhooks import router as webhooks_router, set_queue
 from src.queue.factory import create_queue
+from src.database.engine import init_db, close_db
 
 # Version info
 __version__ = "0.1.0"
@@ -188,8 +189,13 @@ async def startup_event() -> None:
     queue = await create_queue(queue_name="multi-agent-jobs", fallback_to_memory=True)
     set_queue(queue)
 
+    # Initialize database (creates tables if they don't exist)
+    try:
+        await init_db()
+    except Exception as e:
+        print(f"⚠ Database initialization error: {e}")
+
     # TODO: Add actual startup logic:
-    # - Initialize database
     # - Load agent definitions
     # - Initialize monitoring
 
@@ -216,8 +222,13 @@ async def shutdown_event() -> None:
     except Exception as e:
         print(f"⚠ Error closing queue: {e}")
 
+    # Close database connections
+    try:
+        await close_db()
+    except Exception as e:
+        print(f"⚠ Error closing database: {e}")
+
     # TODO: Add actual shutdown logic:
-    # - Close database connections
     # - Flush monitoring metrics
 
 
