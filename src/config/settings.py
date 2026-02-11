@@ -2,12 +2,19 @@
 Configuration management for Multi-Agent GitHub Issue Routing System.
 
 This module provides environment-based configuration using Pydantic Settings.
+Supports loading from .env files, environment variables, and provides
+startup validation with clear error messages.
 """
 
+import logging
 import os
+from functools import lru_cache
 from typing import Optional, List
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class AppSettings(BaseSettings):
@@ -15,6 +22,7 @@ class AppSettings(BaseSettings):
     Application settings loaded from environment variables.
 
     All settings can be overridden via environment variables or a .env file.
+    Priority: Environment variables > .env file > defaults
     """
 
     model_config = SettingsConfigDict(
@@ -107,16 +115,168 @@ class AppSettings(BaseSettings):
     required_labels: Optional[List[str]] = None
     """List of labels that must be present on issues for processing."""
 
+    # ======================
+    # Validators
+    # ======================
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Validate that log level is a valid Python logging level."""
+        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        upper_v = v.upper()
+        if upper_v not in valid_levels:
+            raise ValueError(
+                f"Invalid log level '{v}'. Must be one of: {', '.join(sorted(valid_levels))}"
+            )
+        return upper_v
 
-# Global settings instance
-settings = AppSettings()
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: str) -> str:
+        """Validate environment name."""
+        valid_envs = {"development", "staging", "production"}
+        lower_v = v.lower()
+        if lower_v not in valid_envs:
+            raise ValueError(
+                f"Invalid environment '{v}'. Must be one of: {', '.join(sorted(valid_envs))}"
+            )
+        return lower_v
+
+    @field_validator("convergence_threshold")
+    @classmethod
+    def validate_convergence_threshold(cls, v: float) -> float:
+        """Validate convergence threshold is between 0 and 1."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(
+                f"convergence_threshold must be between 0.0 and 1.0, got {v}"
+            )
+        return v
+
+    @field_validator("min_value_threshold")
+    @classmethod
+    def validate_min_value_threshold(cls, v: float) -> float:
+        """Validate min value threshold is between 0 and 1."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(
+                f"min_value_threshold must be between 0.0 and 1.0, got {v}"
+            )
+        return v
+
+    @field_validator("max_rounds")
+    @classmethod
+    def validate_max_rounds(cls, v: int) -> int:
+        """Validate max rounds is positive."""
+        if v < 1:
+            raise ValueError(f"max_rounds must be at least 1, got {v}")
+        return v
+
+    @field_validator("timeout_minutes")
+    @classmethod
+    def validate_timeout_minutes(cls, v: int) -> int:
+        """Validate timeout is positive."""
+        if v < 1:
+            raise ValueError(f"timeout_minutes must be at least 1, got {v}")
+        return v
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production environment."""
+        return self.environment == "production"
+
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development environment."""
+        return self.environment == "development"
+
+    @property
+    def has_github_token(self) -> bool:
+        """Check if GitHub token is configured."""
+        return bool(self.github_token and self.github_token != "ghp_your_github_personal_access_token_here")
+
+    @property
+    def has_anthropic_key(self) -> bool:
+        """Check if Anthropic API key is configured."""
+        return bool(self.anthropic_api_key and self.anthropic_api_key != "sk-ant-your_anthropic_api_key_here")
+
+    @property
+    def has_webhook_secret(self) -> bool:
+        """Check if webhook secret is configured."""
+        return bool(self.github_webhook_secret and self.github_webhook_secret != "your_webhook_secret_here")
+
+    def validate_for_startup(self) -> list[str]:
+        """
+        Validate configuration for startup and return warnings.
+
+        Returns a list of warning messages for missing optional configurations.
+        Raises ValueError for critical missing configurations in production.
+        """
+        warnings = []
+        errors = []
+
+        # Check critical configurations
+        if not self.has_github_token:
+            if self.is_production:
+                errors.append("GITHUB_TOKEN is required in production")
+            else:
+                warnings.append(
+                    "GITHUB_TOKEN not configured - GitHub integration will not work"
+                )
+
+        if not self.has_anthropic_key:
+            if self.is_production:
+                errors.append("ANTHROPIC_API_KEY is required in production")
+            else:
+                warnings.append(
+                    "ANTHROPIC_API_KEY not configured - AI agent features will not work"
+                )
+
+        if not self.has_webhook_secret:
+            if self.is_production:
+                errors.append("GITHUB_WEBHOOK_SECRET is required in production")
+            else:
+                warnings.append(
+                    "GITHUB_WEBHOOK_SECRET not configured - webhook signature validation disabled"
+                )
+
+        # Raise errors for production misconfigurations
+        if errors:
+            error_msg = "Configuration errors:\n" + "\n".join(f"  - {e}" for e in errors)
+            raise ValueError(error_msg)
+
+        return warnings
+
+    def log_configuration_summary(self) -> None:
+        """Log a summary of the current configuration (without secrets)."""
+        logger.info("=" * 50)
+        logger.info("Configuration Summary")
+        logger.info("=" * 50)
+        logger.info(f"  Environment: {self.environment}")
+        logger.info(f"  Log Level: {self.log_level}")
+        logger.info(f"  Database: {self.database_url}")
+        logger.info(f"  Redis: {self.redis_url}")
+        logger.info(f"  GitHub Token: {'configured' if self.has_github_token else 'NOT SET'}")
+        logger.info(f"  Anthropic Key: {'configured' if self.has_anthropic_key else 'NOT SET'}")
+        logger.info(f"  Webhook Secret: {'configured' if self.has_webhook_secret else 'NOT SET'}")
+        logger.info(f"  Max Rounds: {self.max_rounds}")
+        logger.info(f"  Convergence Threshold: {self.convergence_threshold}")
+        logger.info(f"  Timeout: {self.timeout_minutes} minutes")
+        logger.info(f"  Cost Tracking: {'enabled' if self.enable_cost_tracking else 'disabled'}")
+        logger.info(f"  Caching: {'enabled' if self.enable_caching else 'disabled'}")
+        logger.info(f"  Label Filtering: {'enabled' if self.enable_label_filtering else 'disabled'}")
+        logger.info("=" * 50)
 
 
+# Global settings instance (cached)
+@lru_cache()
 def get_settings() -> AppSettings:
     """
-    Get the global application settings.
+    Get the global application settings (cached).
 
     Returns:
         AppSettings: The configured application settings.
     """
-    return settings
+    return AppSettings()
+
+
+# Convenience access - create on first import
+settings = get_settings()

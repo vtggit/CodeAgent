@@ -16,10 +16,11 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# Import routers
+# Import routers and configuration
 from src.api.webhooks import router as webhooks_router, set_queue
 from src.queue.factory import create_queue
 from src.database.engine import init_db, close_db
+from src.config.settings import get_settings
 
 # Version info
 __version__ = "0.1.0"
@@ -185,15 +186,31 @@ async def startup_event() -> None:
     """
     print(f"Starting Multi-Agent GitHub Router v{__version__}")
 
+    # Validate and log configuration
+    app_settings = get_settings()
+    try:
+        warnings = app_settings.validate_for_startup()
+        for warning in warnings:
+            print(f"  ⚠ {warning}")
+        app_settings.log_configuration_summary()
+    except ValueError as e:
+        print(f"  ✗ Configuration validation failed: {e}")
+        if app_settings.is_production:
+            raise
+
     # Initialize queue (Redis preferred, memory fallback)
-    queue = await create_queue(queue_name="multi-agent-jobs", fallback_to_memory=True)
+    queue = await create_queue(
+        queue_name="multi-agent-jobs",
+        fallback_to_memory=True,
+        redis_url=app_settings.redis_url,
+    )
     set_queue(queue)
 
     # Initialize database (creates tables if they don't exist)
     try:
         await init_db()
     except Exception as e:
-        print(f"⚠ Database initialization error: {e}")
+        print(f"  ⚠ Database initialization error: {e}")
 
     # TODO: Add actual startup logic:
     # - Load agent definitions

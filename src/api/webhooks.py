@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.utils.webhook import validate_github_signature, extract_issue_data
 from src.queue.base import BaseQueue, QueueJob
+from src.config.settings import get_settings
 
 
 # Router for webhook endpoints
@@ -80,21 +81,29 @@ async def github_webhook(
     # Read raw body for signature validation
     raw_body = await request.body()
 
-    # Get webhook secret from environment (placeholder for now)
-    # TODO: Load from configuration in issue #8
-    webhook_secret = "dev-webhook-secret"  # Replace with env var
+    # Get webhook secret from configuration
+    app_settings = get_settings()
+    webhook_secret = app_settings.github_webhook_secret
 
     # Validate GitHub signature
     if x_hub_signature_256:
+        if not webhook_secret:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Webhook secret not configured on server",
+            )
         if not validate_github_signature(raw_body, x_hub_signature_256, webhook_secret):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook signature",
             )
-    else:
-        # In development, we might not have a signature
-        # TODO: Make this stricter in production
-        pass
+    elif app_settings.is_production:
+        # In production, require signature validation
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing webhook signature header",
+        )
+    # In development, allow unsigned webhooks
 
     # Parse JSON payload
     try:
