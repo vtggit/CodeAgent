@@ -1,0 +1,480 @@
+# Multi-Agent GitHub Issue Routing System
+# Agent Definitions Configuration
+#
+# Each agent has:
+#   - type: Agent implementation class (claude_sdk_text, claude_sdk_code)
+#   - expertise: Short description of expertise area
+#   - domain_knowledge: Detailed knowledge areas and skills
+#   - priority: Selection priority 1-10 (higher = more likely to be selected)
+#   - category: Agent category for grouping
+
+agents:
+  # ============= ARCHITECTURE & DESIGN =============
+
+  system_architect:
+    type: claude_sdk_text
+    expertise: "System architecture and high-level design"
+    domain_knowledge: |
+      Expert in: Microservices vs monoliths, scalability patterns, system boundaries,
+      service communication, data flow, architectural trade-offs, technical debt management,
+      evolutionary architecture, domain-driven design.
+    priority: 9
+    category: architecture
+
+  ui_architect:
+    type: claude_sdk_text
+    expertise: "User interface architecture and component design"
+    domain_knowledge: |
+      Expert in: Component architecture, design systems, atomic design, responsive design,
+      CSS architecture (BEM, CSS-in-JS), state management patterns, reusable components,
+      theming systems, design tokens.
+    priority: 8
+    category: architecture
+
+  data_architect:
+    type: claude_sdk_text
+    expertise: "Database design and data modeling"
+    domain_knowledge: |
+      Expert in: Data modeling (relational, document, graph), normalization, indexing strategies,
+      query optimization, data migration, ETL pipelines, data warehousing, OLTP vs OLAP.
+    priority: 8
+    category: architecture
+
+  api_architect:
+    type: claude_sdk_text
+    expertise: "API design and REST/GraphQL architecture"
+    domain_knowledge: |
+      Expert in: RESTful design, GraphQL schemas, API versioning, rate limiting,
+      authentication/authorization patterns, API documentation (OpenAPI), pagination,
+      error handling, backwards compatibility.
+    priority: 8
+    category: architecture
+
+  # ============= DEVELOPMENT =============
+
+  frontend_dev:
+    type: claude_sdk_code
+    expertise: "Frontend development and implementation"
+    domain_knowledge: |
+      Expert in: React, Vue, Angular, TypeScript, JavaScript ES6+, webpack, Vite,
+      state management (Redux, Zustand), React hooks, component lifecycle,
+      testing (Jest, React Testing Library), CSS frameworks (Tailwind, styled-components).
+    tools: ["edit_files", "run_tests", "terminal", "npm"]
+    can_edit_files: true
+    priority: 7
+    category: development
+
+  backend_dev:
+    type: claude_sdk_code
+    expertise: "Backend development and API implementation"
+    domain_knowledge: |
+      Expert in: Node.js, Python (FastAPI, Django), Go, Java Spring Boot,
+      RESTful APIs, database integration, authentication middleware, logging,
+      error handling, async/await patterns, testing (pytest, Jest).
+    tools: ["edit_files", "run_tests", "terminal", "npm", "pip"]
+    can_edit_files: true
+    priority: 7
+    category: development
+
+  ios_developer:
+    type: claude_sdk_text
+    expertise: "iOS native development"
+    domain_knowledge: |
+      Expert in: Swift, SwiftUI, UIKit, Combine, iOS SDK, Core Data, networking,
+      App Store guidelines, iOS Human Interface Guidelines, performance optimization,
+      memory management, testing (XCTest).
+    priority: 5
+    category: development
+
+  android_developer:
+    type: claude_sdk_text
+    expertise: "Android native development"
+    domain_knowledge: |
+      Expert in: Kotlin, Jetpack Compose, Android SDK, Material Design 3,
+      Room database, Retrofit, Coroutines, ViewModel, LiveData, testing (JUnit, Espresso),
+      Google Play policies.
+    priority: 5
+    category: development
+
+  database_expert:
+    type: claude_sdk_text
+    expertise: "Database optimization and query performance"
+    domain_knowledge: |
+      Expert in: SQL optimization, index tuning, query plans, EXPLAIN analysis,
+      connection pooling, N+1 query problems, materialized views, partitioning,
+      replication, sharding, database migrations.
+    priority: 6
+    category: development
+
+  mobile_web_dev:
+    type: claude_sdk_text
+    expertise: "Progressive Web Apps and mobile web"
+    domain_knowledge: |
+      Expert in: PWA architecture, service workers, offline functionality,
+      mobile-first design, touch interactions, responsive images, web app manifests,
+      mobile performance optimization, viewport configuration.
+    priority: 5
+    category: development
+
+  # ============= QUALITY & COMPLIANCE =============
+
+  qa_engineer:
+    type: claude_sdk_text
+    expertise: "Quality assurance and testing strategy"
+    domain_knowledge: |
+      Expert in: Test planning, test case design, unit testing, integration testing,
+      e2e testing (Playwright, Cypress), load testing, regression testing,
+      test automation, bug triage, test coverage analysis, QA best practices.
+    priority: 7
+    category: quality
+
+  security_expert:
+    type: claude_sdk_text
+    expertise: "Application security and vulnerability assessment"
+    domain_knowledge: |
+      Expert in: OWASP Top 10, XSS prevention, CSRF protection, SQL injection,
+      authentication (OAuth, JWT), authorization (RBAC, ABAC), secure coding practices,
+      dependency scanning, secrets management, security headers, penetration testing.
+    priority: 8
+    category: quality
+
+  ada_expert:
+    type: claude_sdk_text
+    expertise: "Web accessibility and WCAG compliance"
+    domain_knowledge: |
+      Expert in: WCAG 2.1 Level AA/AAA, Section 508, ARIA attributes, screen reader
+      compatibility (NVDA, JAWS, VoiceOver), keyboard navigation, focus management,
+      color contrast (4.5:1, 7:1), semantic HTML, skip links, accessible forms,
+      testing with axe DevTools.
+    priority: 7
+    category: quality
+
+  performance_expert:
+    type: claude_sdk_text
+    expertise: "Application performance optimization"
+    domain_knowledge: |
+      Expert in: Core Web Vitals (LCP, FID, CLS), bundle optimization, code splitting,
+      lazy loading, image optimization, caching strategies, CDN configuration,
+      database query optimization, profiling, lighthouse audits, performance budgets.
+    priority: 7
+    category: quality
+
+  privacy_expert:
+    type: claude_sdk_text
+    expertise: "Data privacy and compliance"
+    domain_knowledge: |
+      Expert in: GDPR, CCPA, data minimization, consent management, cookie policies,
+      data retention, right to deletion, privacy by design, data encryption,
+      anonymization techniques, privacy impact assessments.
+    priority: 6
+    category: quality
+
+  legal_compliance:
+    type: claude_sdk_text
+    expertise: "Legal compliance and regulatory requirements"
+    domain_knowledge: |
+      Expert in: Terms of Service, Privacy Policy, DMCA, copyright, licensing,
+      age restrictions (COPPA), industry regulations (HIPAA, PCI-DSS, SOC 2),
+      data residency, audit requirements.
+    priority: 5
+    category: quality
+
+  # ============= INFRASTRUCTURE & DEVOPS =============
+
+  devops_engineer:
+    type: claude_sdk_text
+    expertise: "DevOps practices and CI/CD pipelines"
+    domain_knowledge: |
+      Expert in: CI/CD (GitHub Actions, GitLab CI, Jenkins), Docker, Kubernetes,
+      infrastructure as code (Terraform, CloudFormation), monitoring (Prometheus, Grafana),
+      logging (ELK stack), deployment strategies (blue-green, canary), GitOps.
+    priority: 6
+    category: infrastructure
+
+  cloud_architect:
+    type: claude_sdk_text
+    expertise: "Cloud infrastructure and architecture"
+    domain_knowledge: |
+      Expert in: AWS, GCP, Azure services, serverless (Lambda, Cloud Functions),
+      load balancing, auto-scaling, disaster recovery, multi-region deployment,
+      cost optimization, cloud security, managed services.
+    priority: 6
+    category: infrastructure
+
+  sre:
+    type: claude_sdk_text
+    expertise: "Site reliability engineering"
+    domain_knowledge: |
+      Expert in: Service level objectives (SLOs), error budgets, incident response,
+      on-call procedures, post-mortems, monitoring and alerting, capacity planning,
+      reliability patterns, chaos engineering.
+    priority: 6
+    category: infrastructure
+
+  network_engineer:
+    type: claude_sdk_text
+    expertise: "Network architecture and security"
+    domain_knowledge: |
+      Expert in: VPC design, subnets, firewalls, VPN, DNS, load balancers,
+      CDN configuration, DDoS protection, network security groups, zero trust,
+      service mesh (Istio).
+    priority: 5
+    category: infrastructure
+
+  # ============= DATA & ML =============
+
+  ml_engineer:
+    type: claude_sdk_text
+    expertise: "Machine learning and model deployment"
+    domain_knowledge: |
+      Expert in: ML model training, feature engineering, model evaluation,
+      deployment strategies, model monitoring, A/B testing, MLOps, TensorFlow,
+      PyTorch, scikit-learn, model versioning.
+    priority: 5
+    category: domain
+
+  data_engineer:
+    type: claude_sdk_text
+    expertise: "Data pipelines and ETL"
+    domain_knowledge: |
+      Expert in: Data pipeline design, ETL/ELT, Apache Airflow, data warehousing,
+      data lake architecture, streaming (Kafka, Kinesis), data validation,
+      data quality, schema evolution.
+    priority: 5
+    category: domain
+
+  analytics_expert:
+    type: claude_sdk_text
+    expertise: "Product analytics and instrumentation"
+    domain_knowledge: |
+      Expert in: Event tracking, analytics implementation (Google Analytics, Mixpanel,
+      Amplitude), conversion funnels, A/B testing, cohort analysis, attribution,
+      data visualization, metrics definition.
+    priority: 5
+    category: domain
+
+  data_scientist:
+    type: claude_sdk_text
+    expertise: "Data analysis and statistical modeling"
+    domain_knowledge: |
+      Expert in: Statistical analysis, hypothesis testing, predictive modeling,
+      time series analysis, clustering, dimensionality reduction, Python (pandas, numpy),
+      R, visualization (matplotlib, seaborn), Jupyter notebooks.
+    priority: 4
+    category: domain
+
+  # ============= BUSINESS & PRODUCT =============
+
+  product_manager:
+    type: claude_sdk_text
+    expertise: "Product management and requirements"
+    domain_knowledge: |
+      Expert in: Requirements gathering, user stories, acceptance criteria,
+      prioritization frameworks (RICE, MoSCoW), product roadmaps, stakeholder management,
+      feature specifications, success metrics, competitive analysis.
+    priority: 7
+    category: business
+
+  ux_researcher:
+    type: claude_sdk_text
+    expertise: "User experience research"
+    domain_knowledge: |
+      Expert in: User interviews, usability testing, surveys, personas, journey mapping,
+      research synthesis, research ethics, quantitative and qualitative methods,
+      accessibility research, inclusive design.
+    priority: 6
+    category: business
+
+  ux_designer:
+    type: claude_sdk_text
+    expertise: "User experience and interaction design"
+    domain_knowledge: |
+      Expert in: User flows, wireframes, prototypes, interaction patterns,
+      information architecture, usability heuristics, design thinking,
+      Figma/Sketch, responsive design, micro-interactions.
+    priority: 7
+    category: business
+
+  ui_designer:
+    type: claude_sdk_text
+    expertise: "Visual design and UI aesthetics"
+    domain_knowledge: |
+      Expert in: Visual hierarchy, typography, color theory, layout, iconography,
+      design systems, brand guidelines, design tools (Figma, Adobe XD),
+      animation, design tokens.
+    priority: 6
+    category: business
+
+  tech_writer:
+    type: claude_sdk_text
+    expertise: "Technical documentation"
+    domain_knowledge: |
+      Expert in: API documentation, user guides, tutorials, README files,
+      documentation architecture, docs-as-code, Markdown, documentation tools
+      (Docusaurus, GitBook), content strategy, technical editing.
+    priority: 4
+    category: business
+
+  content_strategist:
+    type: claude_sdk_text
+    expertise: "Content strategy and information architecture"
+    domain_knowledge: |
+      Expert in: Content modeling, taxonomy, metadata, content governance,
+      SEO strategy, content migration, editorial workflows, voice and tone,
+      localization strategy.
+    priority: 4
+    category: business
+
+  # ============= SPECIALIZED DOMAINS =============
+
+  seo_expert:
+    type: claude_sdk_text
+    expertise: "Search engine optimization"
+    domain_knowledge: |
+      Expert in: Technical SEO, meta tags, structured data (schema.org), sitemap,
+      robots.txt, canonical URLs, mobile-first indexing, page speed,
+      Core Web Vitals impact on SEO, crawlability, indexation.
+    priority: 5
+    category: domain
+
+  i18n_expert:
+    type: claude_sdk_text
+    expertise: "Internationalization and localization"
+    domain_knowledge: |
+      Expert in: i18n frameworks (react-intl, i18next), translation workflows,
+      locale formatting (dates, numbers, currency), RTL support, pluralization,
+      cultural considerations, translation memory, localization testing.
+    priority: 5
+    category: domain
+
+  payment_systems_expert:
+    type: claude_sdk_text
+    expertise: "Payment processing and financial systems"
+    domain_knowledge: |
+      Expert in: Payment gateway integration (Stripe, PayPal), PCI-DSS compliance,
+      payment security, fraud detection, refunds, webhooks, recurring billing,
+      multi-currency, payment methods (cards, wallets, bank transfers).
+    priority: 5
+    category: domain
+
+  email_systems_expert:
+    type: claude_sdk_text
+    expertise: "Email systems and deliverability"
+    domain_knowledge: |
+      Expert in: Email service providers (SendGrid, Mailgun), SMTP, SPF/DKIM/DMARC,
+      email templates, deliverability optimization, spam prevention, transactional vs
+      marketing emails, email tracking, unsubscribe handling.
+    priority: 4
+    category: domain
+
+  search_expert:
+    type: claude_sdk_text
+    expertise: "Search functionality and relevance"
+    domain_knowledge: |
+      Expert in: Full-text search, Elasticsearch, search relevance tuning,
+      faceted search, autocomplete, search analytics, indexing strategies,
+      stemming and lemmatization, synonyms, search ranking.
+    priority: 5
+    category: domain
+
+  realtime_systems_expert:
+    type: claude_sdk_text
+    expertise: "Real-time systems and WebSockets"
+    domain_knowledge: |
+      Expert in: WebSockets, Server-Sent Events, real-time protocols,
+      pub/sub patterns, message brokers (Redis, RabbitMQ), connection management,
+      scaling real-time systems, conflict resolution, eventual consistency.
+    priority: 5
+    category: domain
+
+  video_systems_expert:
+    type: claude_sdk_text
+    expertise: "Video processing and streaming"
+    domain_knowledge: |
+      Expert in: Video encoding, HLS/DASH streaming, adaptive bitrate,
+      CDN video delivery, video player implementation, thumbnails, transcoding,
+      video storage optimization, DRM, live streaming.
+    priority: 4
+    category: domain
+
+  gaming_expert:
+    type: claude_sdk_text
+    expertise: "Game development and mechanics"
+    domain_knowledge: |
+      Expert in: Game loops, physics engines, collision detection, game state management,
+      multiplayer synchronization, leaderboards, in-game economies, player progression,
+      Unity/Unreal integration (if web-based games).
+    priority: 3
+    category: domain
+
+  blockchain_expert:
+    type: claude_sdk_text
+    expertise: "Blockchain and Web3 integration"
+    domain_knowledge: |
+      Expert in: Smart contracts, wallet integration (MetaMask), NFTs,
+      gas optimization, blockchain security, Web3.js/ethers.js, IPFS,
+      decentralized storage, token standards (ERC-20, ERC-721).
+    priority: 3
+    category: domain
+
+  ai_integration_expert:
+    type: claude_sdk_text
+    expertise: "AI/LLM integration and prompt engineering"
+    domain_knowledge: |
+      Expert in: LLM API integration (OpenAI, Anthropic), prompt engineering,
+      RAG (retrieval augmented generation), vector databases, embeddings,
+      AI safety, content moderation, token optimization, streaming responses.
+    priority: 6
+    category: domain
+
+  # ============= ADDITIONAL SPECIALISTS =============
+
+  form_design_expert:
+    type: claude_sdk_text
+    expertise: "Form design and user input"
+    domain_knowledge: |
+      Expert in: Form UX, validation patterns, error messaging, progressive disclosure,
+      multi-step forms, autocomplete, input masking, accessibility in forms,
+      form analytics, completion rates.
+    priority: 5
+    category: domain
+
+  notification_expert:
+    type: claude_sdk_text
+    expertise: "Notification systems and user engagement"
+    domain_knowledge: |
+      Expert in: Push notifications, in-app notifications, email notifications,
+      notification preferences, notification grouping, rich notifications,
+      notification frequency management, delivery channels.
+    priority: 4
+    category: domain
+
+  auth_expert:
+    type: claude_sdk_text
+    expertise: "Authentication and identity management"
+    domain_knowledge: |
+      Expert in: OAuth 2.0, OpenID Connect, SAML, SSO, MFA, passwordless auth,
+      session management, token refresh, PKCE, social login, identity providers
+      (Auth0, Okta), biometric authentication.
+    priority: 6
+    category: domain
+
+  error_handling_expert:
+    type: claude_sdk_text
+    expertise: "Error handling and resilience"
+    domain_knowledge: |
+      Expert in: Error boundaries, graceful degradation, retry logic,
+      circuit breakers, error reporting (Sentry, Rollbar), user-friendly error messages,
+      fallback UI, offline handling, error recovery strategies.
+    priority: 5
+    category: domain
+
+  mobile_performance_expert:
+    type: claude_sdk_text
+    expertise: "Mobile app performance optimization"
+    domain_knowledge: |
+      Expert in: Mobile bundle size, lazy loading on mobile, image optimization for mobile,
+      touch responsiveness, battery optimization, network efficiency, app startup time,
+      memory management on mobile.
+    priority: 4
+    category: domain
