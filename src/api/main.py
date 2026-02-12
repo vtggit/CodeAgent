@@ -21,9 +21,20 @@ from src.api.webhooks import router as webhooks_router, set_queue
 from src.queue.factory import create_queue
 from src.database.engine import init_db, close_db
 from src.config.settings import get_settings
+from src.agents.registry import AgentRegistry
 
 # Version info
 __version__ = "0.1.0"
+
+# Global agent registry instance
+_agent_registry: AgentRegistry | None = None
+
+
+def get_agent_registry() -> AgentRegistry:
+    """Get the global agent registry instance."""
+    if _agent_registry is None:
+        raise RuntimeError("Agent registry not initialized")
+    return _agent_registry
 
 # Create FastAPI app
 app = FastAPI(
@@ -148,6 +159,84 @@ async def readiness_check() -> HealthResponse:
     )
 
 
+# Agent registry endpoints
+@app.get("/agents", tags=["Agents"])
+async def list_agents():
+    """
+    List all registered agents.
+
+    Returns a summary of all agents in the registry with their
+    name, expertise, category, priority, and type.
+    """
+    try:
+        registry = get_agent_registry()
+    except RuntimeError:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "Agent registry not initialized"},
+        )
+
+    agents = []
+    for agent in registry.get_all_agents():
+        agents.append({
+            "name": agent.name,
+            "expertise": agent.expertise,
+            "category": agent.category,
+            "priority": agent.priority,
+            "type": agent.agent_type.value,
+        })
+
+    return {
+        "total": len(agents),
+        "agents": agents,
+    }
+
+
+@app.get("/agents/summary", tags=["Agents"])
+async def agents_summary():
+    """
+    Get a summary of the agent registry.
+
+    Returns aggregate information about agents including counts
+    by category and type.
+    """
+    try:
+        registry = get_agent_registry()
+    except RuntimeError:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "Agent registry not initialized"},
+        )
+
+    return registry.get_summary()
+
+
+@app.get("/agents/{agent_name}", tags=["Agents"])
+async def get_agent_detail(agent_name: str):
+    """
+    Get detailed information about a specific agent.
+
+    Args:
+        agent_name: The unique agent identifier
+    """
+    try:
+        registry = get_agent_registry()
+    except RuntimeError:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "Agent registry not initialized"},
+        )
+
+    if not registry.has_agent(agent_name):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": f"Agent '{agent_name}' not found"},
+        )
+
+    agent = registry.get_agent(agent_name)
+    return agent.to_dict()
+
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception) -> JSONResponse:
@@ -212,9 +301,20 @@ async def startup_event() -> None:
     except Exception as e:
         print(f"  ⚠ Database initialization error: {e}")
 
-    # TODO: Add actual startup logic:
-    # - Load agent definitions
-    # - Initialize monitoring
+    # Load agent registry
+    global _agent_registry
+    _agent_registry = AgentRegistry()
+    try:
+        config_path = str(Path(__file__).parent.parent.parent / "config" / "agent_definitions.yaml")
+        count = _agent_registry.load_from_yaml(config_path)
+        print(f"✓ Agent registry loaded: {count} agents")
+        summary = _agent_registry.get_summary()
+        for cat, cat_count in sorted(summary["categories"].items()):
+            print(f"  • {cat}: {cat_count} agents")
+    except Exception as e:
+        print(f"  ⚠ Agent registry load error: {e}")
+
+    # TODO: Initialize monitoring
 
 
 # Shutdown event
