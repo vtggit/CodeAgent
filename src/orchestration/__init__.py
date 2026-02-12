@@ -11,6 +11,10 @@ from src.orchestration.convergence import (
     detect_rambling,
     measure_value_added,
 )
+from src.orchestration.deliberation import (
+    DeliberationResult,
+    MultiAgentDeliberationOrchestrator,
+)
 from src.orchestration.moderator import (
     AgentSelectionResult,
     ModeratorAgent,
@@ -20,7 +24,9 @@ from src.orchestration.moderator import (
 __all__ = [
     "AgentSelectionResult",
     "ConvergenceDetector",
+    "DeliberationResult",
     "ModeratorAgent",
+    "MultiAgentDeliberationOrchestrator",
     "calculate_convergence_score",
     "detect_rambling",
     "measure_value_added",

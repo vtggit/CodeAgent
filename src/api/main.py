@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Import routers and configuration
 from src.api.webhooks import router as webhooks_router, set_queue
+from src.api.deliberation import router as deliberation_router
 from src.queue.factory import create_queue
 from src.database.engine import init_db, close_db
 from src.config.settings import get_settings
@@ -61,6 +62,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(webhooks_router)
+app.include_router(deliberation_router)
 
 
 # Response models
