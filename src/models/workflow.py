@@ -103,7 +103,10 @@ class ContinueDecision(BaseModel):
     @classmethod
     def validate_value_trend(cls, v: str) -> str:
         """Ensure value_trend is one of the allowed values."""
-        allowed = {"increasing", "decreasing", "stable", "unknown"}
+        allowed = {
+            "increasing", "decreasing", "stable", "unknown",
+            "converged", "declining", "plateaued", "limited", "productive",
+        }
         if v not in allowed:
             raise ValueError(f"value_trend must be one of {allowed}, got '{v}'")
         return v
