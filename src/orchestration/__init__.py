@@ -20,6 +20,7 @@ from src.orchestration.moderator import (
     ModeratorAgent,
     select_agents_by_keywords,
 )
+from src.orchestration.worker import Worker, WorkerStats
 
 __all__ = [
     "AgentSelectionResult",
@@ -27,6 +28,8 @@ __all__ = [
     "DeliberationResult",
     "ModeratorAgent",
     "MultiAgentDeliberationOrchestrator",
+    "Worker",
+    "WorkerStats",
     "calculate_convergence_score",
     "detect_rambling",
     "measure_value_added",
