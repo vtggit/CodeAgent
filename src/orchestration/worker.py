@@ -47,6 +47,7 @@ from src.orchestration.deliberation import (
     MultiAgentDeliberationOrchestrator,
 )
 from src.orchestration.moderator import ModeratorAgent
+from src.integrations.github_client import GitHubClient, get_github_client, close_github_client
 from src.queue.base import BaseQueue, QueueJob
 from src.queue.factory import create_queue
 
@@ -574,48 +575,39 @@ class Worker:
         """
         Post deliberation results back to the GitHub issue as a comment.
 
+        Uses the GitHubClient wrapper for robust API interaction with
+        automatic rate limit handling and retries.
+
         Args:
             issue_number: GitHub issue number
             result: Deliberation result to post
         """
-        settings = get_settings()
+        client = get_github_client()
 
-        if not settings.has_github_token:
+        if client is None:
             self._logger.debug(
-                "GitHub token not configured - skipping result posting for issue #%d",
+                "GitHub client not available - skipping result posting for issue #%d",
+                issue_number,
+            )
+            return
+
+        repo_name = os.getenv("GITHUB_REPOSITORY")
+        if not repo_name:
+            self._logger.warning(
+                "GITHUB_REPOSITORY not set - cannot post results to issue #%d",
                 issue_number,
             )
             return
 
         try:
-            from github import Auth, Github
-
-            auth = Auth.Token(settings.github_token)
-            gh = Github(auth=auth)
-            repo_name = os.getenv("GITHUB_REPOSITORY")
-
-            if not repo_name:
-                self._logger.warning(
-                    "GITHUB_REPOSITORY not set - cannot post results to issue #%d",
-                    issue_number,
-                )
-                return
-
-            repo = gh.get_repo(repo_name)
-            issue = repo.get_issue(issue_number)
-
-            # Format the comment
+            # Format and post the comment using the client wrapper
             comment_body = self._format_github_comment(result)
-            issue.create_comment(comment_body)
+            comment = client.post_comment(repo_name, issue_number, comment_body)
 
             self._logger.info(
-                "Posted deliberation results to issue #%d",
+                "Posted deliberation results to issue #%d (comment_id=%d)",
                 issue_number,
-            )
-
-        except ImportError:
-            self._logger.warning(
-                "PyGithub not installed - cannot post results to GitHub"
+                comment.id,
             )
         except Exception as e:
             self._logger.warning(
