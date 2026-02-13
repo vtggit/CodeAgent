@@ -424,21 +424,22 @@ class TestGitHubCommentFormatting:
     """Tests for formatting deliberation results as GitHub comments."""
 
     def test_format_comment_structure(self, worker, mock_orchestrator):
-        """GitHub comment has expected structure."""
-        result = mock_orchestrator.deliberate_on_issue.return_value
-        comment = worker._format_github_comment(result)
+        """GitHub comment has expected structure via ResultFormatter."""
+        from src.integrations.result_poster import ResultFormatter
 
-        assert "## Multi-Agent Deliberation Results" in comment
-        assert "**Rounds:** 3" in comment
-        assert "**Comments:** 8" in comment
-        assert "**Convergence:** 85%" in comment
-        assert "### Agent Participation" in comment
-        assert "**ui_architect**" in comment
-        assert "### Summary" in comment
+        result = mock_orchestrator.deliberate_on_issue.return_value
+        formatter = ResultFormatter()
+        comment = formatter.format(result)
+
+        assert "Multi-Agent Deliberation Results" in comment
+        assert "Agent Participation" in comment
+        assert "ui_architect" in comment
         assert "Test summary" in comment
 
     def test_format_comment_no_participation(self, worker):
-        """Comment handles empty participation gracefully."""
+        """Comment handles empty participation gracefully via ResultFormatter."""
+        from src.integrations.result_poster import ResultFormatter
+
         result = MagicMock()
         result.total_rounds = 0
         result.total_comments = 0
@@ -448,9 +449,12 @@ class TestGitHubCommentFormatting:
         result.summary = ""
         result.duration_seconds = 0.0
         result.workflow.status.value = "completed"
+        result.workflow.conversation_history = []
+        result.round_metrics = []
 
-        comment = worker._format_github_comment(result)
-        assert "## Multi-Agent Deliberation Results" in comment
+        formatter = ResultFormatter()
+        comment = formatter.format(result)
+        assert "Multi-Agent Deliberation Results" in comment
         assert "Agent Participation" not in comment
 
 

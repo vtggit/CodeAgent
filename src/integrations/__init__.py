@@ -1,8 +1,8 @@
 """
 Integrations module for external service clients.
 
-Provides wrapper classes for GitHub API, and potentially
-other external services in the future.
+Provides wrapper classes for GitHub API, result posting,
+and potentially other external services in the future.
 """
 
 from src.integrations.github_client import (
@@ -15,6 +15,10 @@ from src.integrations.github_client import (
     get_github_client,
     close_github_client,
 )
+from src.integrations.result_poster import (
+    ResultFormatter,
+    ResultPoster,
+)
 
 __all__ = [
     "GitHubClient",
@@ -25,4 +29,6 @@ __all__ = [
     "ClientStats",
     "get_github_client",
     "close_github_client",
+    "ResultFormatter",
+    "ResultPoster",
 ]
