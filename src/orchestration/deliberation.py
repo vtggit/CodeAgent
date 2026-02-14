@@ -43,6 +43,12 @@ from src.orchestration.convergence import (
     measure_value_added,
 )
 from src.orchestration.moderator import AgentSelectionResult, ModeratorAgent
+from src.orchestration.recovery import (
+    WorkflowRecoveryError,
+    get_last_convergence_state,
+    load_workflow_for_recovery,
+    reconstruct_workflow,
+)
 from src.orchestration.synthesis import RecommendationSynthesizer, SynthesisResult
 
 logger = logging.getLogger(__name__)
@@ -390,6 +396,249 @@ class MultiAgentDeliberationOrchestrator:
                 round_metrics=round_metrics_list,
                 duration_seconds=duration,
             )
+
+    # ========================
+    # Workflow Recovery & Resume
+    # ========================
+
+    async def resume_deliberation(
+        self,
+        instance_id: str,
+    ) -> DeliberationResult:
+        """
+        Resume an interrupted deliberation from its last saved state.
+
+        Loads the workflow from the database, reconstructs the in-memory
+        state, and continues the deliberation loop from the next round.
+
+        Args:
+            instance_id: The workflow instance ID to resume.
+
+        Returns:
+            DeliberationResult with the completed deliberation outcome.
+
+        Raises:
+            WorkflowRecoveryError: If the workflow cannot be found or reconstructed.
+            ValueError: If the workflow is not in a resumable state.
+        """
+        start_time = time.time()
+
+        self._logger.info(
+            "Attempting to resume deliberation: %s", instance_id
+        )
+
+        # Load and reconstruct workflow from database
+        workflow = await load_workflow_for_recovery(instance_id)
+        if workflow is None:
+            raise WorkflowRecoveryError(
+                f"Workflow '{instance_id}' not found in database"
+            )
+
+        # Validate the workflow is in a resumable state
+        if workflow.status not in (WorkflowStatus.RUNNING, WorkflowStatus.PENDING):
+            raise ValueError(
+                f"Workflow '{instance_id}' has status '{workflow.status.value}' "
+                f"and cannot be resumed. Only 'running' or 'pending' workflows "
+                f"can be resumed."
+            )
+
+        wf_config = workflow.config
+        resume_round = workflow.current_round + 1
+
+        self._logger.info(
+            "Resuming workflow %s from round %d (max=%d, "
+            "existing comments=%d, agents=%s)",
+            instance_id,
+            resume_round,
+            wf_config.max_rounds,
+            len(workflow.conversation_history),
+            workflow.selected_agents,
+        )
+
+        # Get the DB primary key for persistence
+        db_workflow_pk = await self._get_db_workflow_pk(instance_id)
+
+        # Re-resolve agents from the registry
+        agents = []
+        for agent_name in workflow.selected_agents:
+            agent = self.registry.get_agent(agent_name)
+            if agent is not None:
+                agents.append(agent)
+            else:
+                self._logger.warning(
+                    "Agent '%s' not found in registry during recovery, skipping",
+                    agent_name,
+                )
+
+        if not agents:
+            raise WorkflowRecoveryError(
+                f"No agents could be resolved for workflow '{instance_id}'"
+            )
+
+        round_metrics_list: list[dict[str, Any]] = []
+        termination_reason = ""
+        final_convergence_score = 0.0
+
+        # Check if deliberation was already converged
+        if db_workflow_pk:
+            session = await get_async_session()
+            async with session:
+                db_wf = await crud.get_workflow_by_id(
+                    session, db_workflow_pk, load_relations=True
+                )
+                if db_wf:
+                    conv_state = get_last_convergence_state(db_wf)
+                    if not conv_state["should_continue"]:
+                        self._logger.info(
+                            "Workflow already converged at round %d, "
+                            "proceeding to synthesis",
+                            conv_state["last_round"],
+                        )
+                        resume_round = wf_config.max_rounds + 1  # Skip loop
+
+        try:
+            workflow.status = WorkflowStatus.RUNNING
+
+            # Continue the deliberation loop from the resume round
+            for round_num in range(resume_round, wf_config.max_rounds + 1):
+                workflow.current_round = round_num
+
+                self._logger.info(
+                    "=== Resumed Round %d/%d ===",
+                    round_num,
+                    wf_config.max_rounds,
+                )
+
+                # Execute round: all agents evaluate in parallel
+                round_comments = await self._execute_round(
+                    round_num=round_num,
+                    agents=agents,
+                    workflow=workflow,
+                )
+
+                workflow.conversation_history.extend(round_comments)
+
+                # Persist round state
+                if self.persist_to_db and db_workflow_pk:
+                    await self._persist_round(
+                        db_workflow_pk, round_num, round_comments, workflow
+                    )
+
+                # Convergence check
+                decision = await self.convergence_detector.should_continue(
+                    round_num=round_num,
+                    round_comments=round_comments,
+                    full_history=workflow.conversation_history,
+                    config=wf_config,
+                )
+
+                metrics = await self.convergence_detector.get_round_metrics(
+                    round_num=round_num,
+                    round_comments=round_comments,
+                    full_history=workflow.conversation_history,
+                )
+                round_metrics_list.append(metrics)
+
+                final_convergence_score = decision.convergence_score
+
+                if self.persist_to_db and db_workflow_pk:
+                    await self._persist_convergence_metric(
+                        db_workflow_pk, round_num, decision, round_comments
+                    )
+
+                self._logger.info(
+                    "Resumed round %d: score=%.2f, continue=%s",
+                    round_num,
+                    decision.convergence_score,
+                    decision.should_continue,
+                )
+
+                if not decision.should_continue:
+                    termination_reason = decision.reason
+                    break
+            else:
+                termination_reason = (
+                    f"Maximum rounds ({wf_config.max_rounds}) reached"
+                )
+
+            # Synthesis
+            summary = await self._synthesize_recommendations(workflow)
+            workflow.summary = summary
+            workflow.status = WorkflowStatus.COMPLETED
+            workflow.completed_at = datetime.utcnow()
+
+            agent_participation = self._calculate_agent_participation(workflow)
+
+            if self.persist_to_db and db_workflow_pk:
+                await self._persist_workflow_completed(
+                    db_workflow_pk, workflow, final_convergence_score, summary
+                )
+
+            duration = time.time() - start_time
+            self._logger.info(
+                "Resumed deliberation complete: %d rounds, %d comments, "
+                "convergence=%.2f, duration=%.1fs",
+                workflow.current_round,
+                len(workflow.conversation_history),
+                final_convergence_score,
+                duration,
+            )
+
+            return DeliberationResult(
+                workflow=workflow,
+                summary=summary,
+                total_rounds=workflow.current_round,
+                total_comments=len(workflow.conversation_history),
+                final_convergence_score=final_convergence_score,
+                termination_reason=f"Resumed: {termination_reason}",
+                agent_participation=agent_participation,
+                round_metrics=round_metrics_list,
+                duration_seconds=duration,
+            )
+
+        except Exception as e:
+            workflow.status = WorkflowStatus.FAILED
+            workflow.completed_at = datetime.utcnow()
+
+            self._logger.error(
+                "Resumed deliberation failed for %s: %s",
+                instance_id,
+                str(e),
+                exc_info=True,
+            )
+
+            if self.persist_to_db and db_workflow_pk:
+                await self._update_db_status(
+                    db_workflow_pk, "failed", summary=f"Error during resume: {str(e)}"
+                )
+
+            duration = time.time() - start_time
+            return DeliberationResult(
+                workflow=workflow,
+                summary=f"Resumed deliberation failed: {str(e)}",
+                total_rounds=workflow.current_round,
+                total_comments=len(workflow.conversation_history),
+                final_convergence_score=final_convergence_score,
+                termination_reason=f"Error: {str(e)}",
+                agent_participation=self._calculate_agent_participation(workflow),
+                round_metrics=round_metrics_list,
+                duration_seconds=duration,
+            )
+
+    async def _get_db_workflow_pk(self, instance_id: str) -> Optional[int]:
+        """Get the database primary key for a workflow by instance ID."""
+        try:
+            session = await get_async_session()
+            async with session:
+                db_wf = await crud.get_workflow_by_instance_id(
+                    session=session, instance_id=instance_id
+                )
+                return db_wf.id if db_wf else None
+        except Exception as e:
+            self._logger.warning(
+                "Failed to get DB PK for workflow %s: %s", instance_id, str(e)
+            )
+            return None
 
     # ========================
     # Phase 1: Agent Selection
