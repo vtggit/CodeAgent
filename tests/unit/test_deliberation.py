@@ -803,7 +803,7 @@ class TestSynthesis:
         assert "frontend_dev" in summary
         assert "ada_expert" in summary
         assert "3" in summary  # 3 comments
-        assert "Agent Contributions" in summary
+        assert "Agent Participation" in summary
 
     @pytest.mark.asyncio
     async def test_synthesis_empty_history(self, orchestrator):

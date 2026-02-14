@@ -43,6 +43,7 @@ from src.orchestration.convergence import (
     measure_value_added,
 )
 from src.orchestration.moderator import AgentSelectionResult, ModeratorAgent
+from src.orchestration.synthesis import RecommendationSynthesizer, SynthesisResult
 
 logger = logging.getLogger(__name__)
 
@@ -563,107 +564,23 @@ class MultiAgentDeliberationOrchestrator:
         """
         Synthesize final recommendations from the conversation history.
 
-        Creates a structured summary of the deliberation outcomes including
-        key recommendations, areas of consensus, and unresolved concerns.
-
-        For now, this uses a heuristic-based approach. In the future,
-        it can be enhanced with LLM-based synthesis (Issue #15).
+        Uses the RecommendationSynthesizer to create a structured summary
+        with actionable recommendations, consensus points, unresolved
+        conflicts, and agent participation statistics.
 
         Args:
             workflow: Completed workflow with full conversation history
 
         Returns:
-            Summary string with synthesized recommendations
+            Summary string with synthesized recommendations (Markdown formatted)
         """
-        if not workflow.conversation_history:
-            return "No discussion occurred - no agents commented."
+        synthesizer = RecommendationSynthesizer()
+        synthesis_result = synthesizer.synthesize(workflow)
 
-        # Group comments by agent
-        agent_comments: dict[str, list[Comment]] = {}
-        for comment in workflow.conversation_history:
-            agent_comments.setdefault(comment.agent, []).append(comment)
+        # Store the full synthesis result on the workflow for downstream access
+        self._last_synthesis_result = synthesis_result
 
-        # Calculate participation stats
-        total_agents = len(agent_comments)
-        total_comments = len(workflow.conversation_history)
-        total_rounds = workflow.current_round
-
-        # Find highly referenced agents (their points are most engaged with)
-        reference_counts: dict[str, int] = {}
-        for comment in workflow.conversation_history:
-            for ref in comment.references:
-                reference_counts[ref] = reference_counts.get(ref, 0) + 1
-
-        # Measure final agreement level
-        agreement = measure_agreement_level(workflow.conversation_history[-10:])
-
-        # Build summary
-        lines = [
-            "## Deliberation Summary",
-            "",
-            f"**Issue:** {workflow.github_issue.get('title', 'N/A') if workflow.github_issue else 'N/A'}",
-            f"**Rounds:** {total_rounds}",
-            f"**Participating Agents:** {total_agents}",
-            f"**Total Comments:** {total_comments}",
-            f"**Agreement Level:** {agreement:.0%}",
-            "",
-            "### Agent Contributions",
-            "",
-        ]
-
-        # List each agent's contribution summary
-        for agent_name, comments in sorted(
-            agent_comments.items(),
-            key=lambda x: len(x[1]),
-            reverse=True,
-        ):
-            ref_count = reference_counts.get(agent_name, 0)
-            rounds_active = sorted(set(c.round for c in comments))
-            lines.append(
-                f"- **{agent_name}**: {len(comments)} comment(s) "
-                f"across round(s) {', '.join(str(r) for r in rounds_active)}"
-                f"{f' (referenced {ref_count} time(s))' if ref_count > 0 else ''}"
-            )
-
-        lines.extend([
-            "",
-            "### Key Themes",
-            "",
-        ])
-
-        # Extract key themes from the most-referenced agents' comments
-        if reference_counts:
-            top_referenced = sorted(
-                reference_counts.items(),
-                key=lambda x: x[1],
-                reverse=True,
-            )[:3]
-            for agent_name, count in top_referenced:
-                if agent_name in agent_comments:
-                    # Get the agent's last comment as representative
-                    last_comment = agent_comments[agent_name][-1].comment
-                    # Truncate for summary
-                    preview = last_comment[:200] + "..." if len(last_comment) > 200 else last_comment
-                    lines.append(f"- **{agent_name}** (referenced {count}x): {preview}")
-        else:
-            lines.append("- No cross-agent references detected in discussion.")
-
-        lines.extend([
-            "",
-            "### Consensus Status",
-            "",
-        ])
-
-        if agreement >= 0.8:
-            lines.append("Strong consensus reached among participating agents.")
-        elif agreement >= 0.6:
-            lines.append("Moderate agreement with some differing perspectives.")
-        elif agreement >= 0.4:
-            lines.append("Mixed opinions - further discussion may be needed.")
-        else:
-            lines.append("Significant disagreement among agents. Manual review recommended.")
-
-        return "\n".join(lines)
+        return synthesis_result.summary_text
 
     # ========================
     # Helper Methods
