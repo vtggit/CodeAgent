@@ -27,6 +27,13 @@ from src.orchestration.synthesis import (
     RecommendationSynthesizer,
     SynthesisResult,
 )
+from src.orchestration.recovery import (
+    WorkflowRecoveryError,
+    find_recoverable_workflows,
+    get_last_convergence_state,
+    load_workflow_for_recovery,
+    reconstruct_workflow,
+)
 from src.orchestration.worker import Worker, WorkerStats
 
 __all__ = [
@@ -42,8 +49,13 @@ __all__ = [
     "SynthesisResult",
     "Worker",
     "WorkerStats",
+    "WorkflowRecoveryError",
     "calculate_convergence_score",
     "detect_rambling",
+    "find_recoverable_workflows",
+    "get_last_convergence_state",
+    "load_workflow_for_recovery",
     "measure_value_added",
+    "reconstruct_workflow",
     "select_agents_by_keywords",
 ]

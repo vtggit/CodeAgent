@@ -507,3 +507,77 @@ async def get_active_workflows(
         List of running WorkflowRecord objects.
     """
     return await list_workflows(session, status="running")
+
+
+async def get_interrupted_workflows(
+    session: AsyncSession,
+) -> list[WorkflowRecord]:
+    """
+    Get workflows that were interrupted mid-deliberation.
+
+    Returns workflows with status 'running' that may need recovery.
+    Includes full relationship data for reconstruction.
+
+    Returns:
+        List of WorkflowRecord objects with relations loaded.
+    """
+    stmt = (
+        select(WorkflowRecord)
+        .where(WorkflowRecord.status == "running")
+        .options(
+            selectinload(WorkflowRecord.conversations),
+            selectinload(WorkflowRecord.agents),
+            selectinload(WorkflowRecord.convergence_metrics),
+        )
+        .order_by(WorkflowRecord.updated_at.desc())
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_workflow_for_recovery(
+    session: AsyncSession,
+    instance_id: str,
+) -> Optional[WorkflowRecord]:
+    """
+    Load a complete workflow record for recovery, with all relations.
+
+    Args:
+        session: Database session.
+        instance_id: The workflow instance ID to recover.
+
+    Returns:
+        WorkflowRecord with conversations, agents, and metrics loaded, or None.
+    """
+    return await get_workflow_by_instance_id(
+        session=session,
+        instance_id=instance_id,
+        load_relations=True,
+    )
+
+
+async def update_workflow_summary(
+    session: AsyncSession,
+    workflow_pk: int,
+    summary: str,
+    final_convergence_score: float,
+) -> None:
+    """
+    Update a workflow's summary and convergence score.
+
+    Args:
+        session: Database session.
+        workflow_pk: Workflow primary key.
+        summary: The synthesized summary.
+        final_convergence_score: Final convergence score.
+    """
+    stmt = (
+        update(WorkflowRecord)
+        .where(WorkflowRecord.id == workflow_pk)
+        .values(
+            summary=summary,
+            final_convergence_score=final_convergence_score,
+            updated_at=datetime.utcnow(),
+        )
+    )
+    await session.execute(stmt)
