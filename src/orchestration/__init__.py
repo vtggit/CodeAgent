@@ -20,14 +20,26 @@ from src.orchestration.moderator import (
     ModeratorAgent,
     select_agents_by_keywords,
 )
+from src.orchestration.synthesis import (
+    Conflict,
+    ConsensusPoint,
+    Recommendation,
+    RecommendationSynthesizer,
+    SynthesisResult,
+)
 from src.orchestration.worker import Worker, WorkerStats
 
 __all__ = [
     "AgentSelectionResult",
+    "Conflict",
+    "ConsensusPoint",
     "ConvergenceDetector",
     "DeliberationResult",
     "ModeratorAgent",
     "MultiAgentDeliberationOrchestrator",
+    "Recommendation",
+    "RecommendationSynthesizer",
+    "SynthesisResult",
     "Worker",
     "WorkerStats",
     "calculate_convergence_score",
