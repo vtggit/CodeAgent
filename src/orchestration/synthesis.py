@@ -22,7 +22,6 @@ Design Decisions:
 - All output is Markdown-formatted for GitHub comment compatibility
 """
 
-import logging
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -39,8 +38,9 @@ from src.orchestration.convergence import (
     measure_cross_reference_density,
     text_similarity,
 )
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ==================
@@ -237,7 +237,7 @@ class RecommendationSynthesizer:
 
     def __init__(self) -> None:
         """Initialize the synthesizer."""
-        self._logger = logging.getLogger(f"{__name__}.RecommendationSynthesizer")
+        self._logger = get_logger(__name__, component="synthesizer")
 
     def synthesize(self, workflow: WorkflowInstance) -> SynthesisResult:
         """

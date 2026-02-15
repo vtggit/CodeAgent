@@ -16,16 +16,15 @@ The base class provides:
 - Conversation context helpers
 """
 
-import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Optional
 
 from src.models.agent import AgentConfig, AgentDecision, AgentType, LLMProviderConfig
 from src.models.workflow import Comment, WorkflowInstance
+from src.utils.logging import get_logger
 
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class BaseAgent(ABC):
@@ -52,12 +51,11 @@ class BaseAgent(ABC):
             config: Agent configuration containing name, expertise, LLM settings, etc.
         """
         self._config = config
-        self._logger = logging.getLogger(f"{__name__}.{config.name}")
+        self._logger = get_logger(__name__, agent_name=config.name)
         self._logger.info(
-            "Agent initialized: %s (type=%s, expertise=%s)",
-            config.name,
-            config.type.value,
-            config.expertise[:60],
+            "agent_initialized",
+            agent_type=config.type.value,
+            expertise=config.expertise[:60],
         )
 
     # ==================

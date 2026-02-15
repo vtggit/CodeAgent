@@ -11,7 +11,6 @@ from YAML configuration files and manages the agent pool. It supports:
 - Hot reload capability for config changes
 """
 
-import logging
 import os
 import time
 from pathlib import Path
@@ -22,8 +21,9 @@ import yaml
 from src.agents.base import BaseAgent
 from src.agents.claude_text_agent import ClaudeTextAgent
 from src.models.agent import AgentConfig, AgentType, LLMProviderConfig
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ==================

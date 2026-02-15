@@ -13,7 +13,6 @@ Usage:
     client.post_comment("owner/repo", 42, "Hello from the system!")
 """
 
-import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -26,8 +25,9 @@ from github.Label import Label as GithubLabel
 from github.Repository import Repository as GithubRepository
 
 from src.config.settings import get_settings
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ========================

@@ -15,7 +15,6 @@ whether to continue to the next round or stop the deliberation.
 """
 
 import json
-import logging
 import os
 import re
 from collections import Counter
@@ -25,8 +24,9 @@ from typing import Any, Optional
 import litellm
 
 from src.models.workflow import Comment, ContinueDecision, WorkflowConfig
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ==================
@@ -565,7 +565,7 @@ class ConvergenceDetector:
             "ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"
         )
         self.use_llm = use_llm
-        self._logger = logging.getLogger(f"{__name__}.ConvergenceDetector")
+        self._logger = get_logger(__name__, component="convergence_detector")
 
     async def should_continue(
         self,

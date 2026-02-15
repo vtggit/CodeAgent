@@ -11,6 +11,10 @@ from .base import BaseQueue
 from .redis_queue import RedisQueue
 from .memory_queue import MemoryQueue
 
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 async def create_queue(
     redis_url: Optional[str] = None,
@@ -41,19 +45,19 @@ async def create_queue(
 
         # Test connection
         if await redis_queue.health_check():
-            print(f"✓ Connected to Redis queue: {redis_url}")
+            logger.info("queue_connected", queue_type="redis", redis_url=redis_url)
             return redis_queue
 
         # Redis not available
         if fallback_to_memory:
-            print(f"⚠ Redis not available, using in-memory queue (dev mode)")
+            logger.warning("queue_fallback", reason="redis_unavailable", queue_type="memory")
             return MemoryQueue(queue_name=queue_name)
         else:
             raise ConnectionError(f"Failed to connect to Redis at {redis_url}")
 
     except Exception as e:
         if fallback_to_memory:
-            print(f"⚠ Redis error ({e}), using in-memory queue (dev mode)")
+            logger.warning("queue_fallback", reason=str(e), queue_type="memory")
             return MemoryQueue(queue_name=queue_name)
         else:
             raise ConnectionError(f"Failed to connect to Redis: {e}")
@@ -76,5 +80,5 @@ def get_queue_sync(
     Returns:
         In-memory queue instance
     """
-    print(f"⚠ Using synchronous queue creation, falling back to memory queue")
+    logger.warning("queue_sync_fallback", queue_type="memory")
     return MemoryQueue(queue_name=queue_name)

@@ -13,7 +13,6 @@ analysis with a keyword-based fallback when LLM is unavailable.
 """
 
 import json
-import logging
 import os
 import re
 from typing import Any, Optional
@@ -23,8 +22,9 @@ import litellm
 from src.agents.base import BaseAgent
 from src.agents.registry import AgentRegistry
 from src.models.agent import AgentConfig
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Selection constraints
 MIN_AGENTS = 5
@@ -298,7 +298,7 @@ class ModeratorAgent:
             "ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"
         )
         self._registry = registry
-        self._logger = logging.getLogger(f"{__name__}.ModeratorAgent")
+        self._logger = get_logger(__name__, component="moderator")
         self._logger.info("ModeratorAgent initialized with model: %s", self.model)
 
     @property

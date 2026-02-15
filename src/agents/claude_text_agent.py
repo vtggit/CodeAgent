@@ -13,7 +13,6 @@ The agent makes two types of LLM calls:
 
 import asyncio
 import json
-import logging
 import time
 from typing import Any, Optional
 
@@ -28,9 +27,10 @@ from tenacity import (
 from src.agents.base import BaseAgent
 from src.models.agent import AgentConfig, AgentDecision, AgentType
 from src.models.workflow import Comment, WorkflowInstance
+from src.utils.logging import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Suppress litellm verbose logging
 litellm.set_verbose = False

@@ -20,7 +20,6 @@ Design Decisions:
 """
 
 import json
-import logging
 from datetime import datetime
 from typing import Optional
 
@@ -39,8 +38,9 @@ from src.models.workflow import (
     WorkflowMetrics,
     WorkflowStatus,
 )
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class WorkflowRecoveryError(Exception):

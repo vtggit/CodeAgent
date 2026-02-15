@@ -19,16 +19,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # Import routers and configuration
 from src.api.webhooks import router as webhooks_router, set_queue
 from src.api.deliberation import router as deliberation_router
+from src.api.middleware import RequestLoggingMiddleware
 from src.queue.factory import create_queue
 from src.database.engine import init_db, close_db
 from src.config.settings import get_settings
 from src.agents.registry import AgentRegistry
+from src.utils.logging import setup_logging, get_logger
 
 # Version info
 __version__ = "0.1.0"
 
 # Global agent registry instance
 _agent_registry: AgentRegistry | None = None
+
+# Logger (initialized after setup_logging is called)
+logger = get_logger(__name__)
 
 
 def get_agent_registry() -> AgentRegistry:
@@ -50,6 +55,9 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+# Request logging middleware (must be added before CORS)
+app.add_middleware(RequestLoggingMiddleware)
 
 # CORS middleware configuration
 app.add_middleware(
@@ -252,6 +260,13 @@ async def global_exception_handler(request, exc: Exception) -> JSONResponse:
     Returns:
         JSONResponse: Error response with details
     """
+    logger.error(
+        "unhandled_exception",
+        error=str(exc),
+        error_type=type(exc).__name__,
+        path=str(request.url.path),
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -269,23 +284,34 @@ async def startup_event() -> None:
     Application startup event handler.
 
     Performs initialization tasks when the application starts:
+    - Configures structured logging
     - Loads configuration
     - Initializes queue (Redis or memory fallback)
     - Initializes database connections
     - Loads agent registry
     - Sets up monitoring
     """
-    print(f"Starting Multi-Agent GitHub Router v{__version__}")
+    # Initialize structured logging first
+    app_settings = get_settings()
+    setup_logging(
+        log_level=app_settings.log_level,
+        environment=app_settings.environment,
+    )
+
+    # Re-bind logger after setup
+    global logger
+    logger = get_logger(__name__)
+
+    logger.info("app_starting", version=__version__)
 
     # Validate and log configuration
-    app_settings = get_settings()
     try:
         warnings = app_settings.validate_for_startup()
         for warning in warnings:
-            print(f"  ⚠ {warning}")
+            logger.warning("config_warning", message=warning)
         app_settings.log_configuration_summary()
     except ValueError as e:
-        print(f"  ✗ Configuration validation failed: {e}")
+        logger.error("config_validation_failed", error=str(e))
         if app_settings.is_production:
             raise
 
@@ -300,8 +326,9 @@ async def startup_event() -> None:
     # Initialize database (creates tables if they don't exist)
     try:
         await init_db()
+        logger.info("database_initialized")
     except Exception as e:
-        print(f"  ⚠ Database initialization error: {e}")
+        logger.warning("database_init_error", error=str(e))
 
     # Load agent registry
     global _agent_registry
@@ -309,14 +336,16 @@ async def startup_event() -> None:
     try:
         config_path = str(Path(__file__).parent.parent.parent / "config" / "agent_definitions.yaml")
         count = _agent_registry.load_from_yaml(config_path)
-        print(f"✓ Agent registry loaded: {count} agents")
         summary = _agent_registry.get_summary()
-        for cat, cat_count in sorted(summary["categories"].items()):
-            print(f"  • {cat}: {cat_count} agents")
+        logger.info(
+            "agent_registry_loaded",
+            total_agents=count,
+            categories=summary["categories"],
+        )
     except Exception as e:
-        print(f"  ⚠ Agent registry load error: {e}")
+        logger.error("agent_registry_load_error", error=str(e))
 
-    # TODO: Initialize monitoring
+    logger.info("app_started", version=__version__)
 
 
 # Shutdown event
@@ -330,25 +359,25 @@ async def shutdown_event() -> None:
     - Closes database connections
     - Flushes metrics
     """
-    print("Shutting down Multi-Agent GitHub Router")
+    logger.info("app_shutting_down")
 
     # Close queue connections
     from src.api.webhooks import get_queue
     try:
         queue = get_queue()
         await queue.close()
-        print("✓ Queue connections closed")
+        logger.info("queue_closed")
     except Exception as e:
-        print(f"⚠ Error closing queue: {e}")
+        logger.warning("queue_close_error", error=str(e))
 
     # Close database connections
     try:
         await close_db()
+        logger.info("database_closed")
     except Exception as e:
-        print(f"⚠ Error closing database: {e}")
+        logger.warning("database_close_error", error=str(e))
 
-    # TODO: Add actual shutdown logic:
-    # - Flush monitoring metrics
+    logger.info("app_shutdown_complete")
 
 
 if __name__ == "__main__":
