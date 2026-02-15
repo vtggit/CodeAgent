@@ -20,6 +20,7 @@ import yaml
 
 from src.agents.base import BaseAgent
 from src.agents.claude_text_agent import ClaudeTextAgent
+from src.agents.claude_code_agent import ClaudeCodeAgent
 from src.models.agent import AgentConfig, AgentType, LLMProviderConfig
 from src.utils.logging import get_logger
 
@@ -33,7 +34,7 @@ logger = get_logger(__name__)
 # Maps AgentType enum values to their concrete implementation classes
 AGENT_TYPE_MAP: dict[AgentType, type[BaseAgent]] = {
     AgentType.CLAUDE_SDK_TEXT: ClaudeTextAgent,
-    # AgentType.CLAUDE_SDK_CODE: ClaudeCodeAgent,  # Future: Issue #11
+    AgentType.CLAUDE_SDK_CODE: ClaudeCodeAgent,
     # AgentType.GITHUB_API: GitHubAPIAgent,         # Future
     # AgentType.CUSTOM: CustomAgent,                 # Future
 }

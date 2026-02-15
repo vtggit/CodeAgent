@@ -8,6 +8,7 @@ deliberation system.
 
 from src.agents.base import BaseAgent
 from src.agents.claude_text_agent import ClaudeTextAgent
+from src.agents.claude_code_agent import ClaudeCodeAgent
 from src.agents.registry import AgentRegistry
 
-__all__ = ["BaseAgent", "ClaudeTextAgent", "AgentRegistry"]
+__all__ = ["BaseAgent", "ClaudeTextAgent", "ClaudeCodeAgent", "AgentRegistry"]
