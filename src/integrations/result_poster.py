@@ -11,7 +11,6 @@ Usage:
     poster.post_results("owner/repo", 42, deliberation_result)
 """
 
-import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -22,8 +21,9 @@ from src.integrations.github_client import (
     GitHubClient,
     get_github_client,
 )
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # Maximum comment length for GitHub (65536 chars)

@@ -26,7 +26,6 @@ Usage:
 """
 
 import asyncio
-import logging
 import os
 import signal
 import sys
@@ -51,8 +50,9 @@ from src.integrations.github_client import GitHubClient, get_github_client, clos
 from src.integrations.result_poster import ResultFormatter, ResultPoster
 from src.queue.base import BaseQueue, QueueJob
 from src.queue.factory import create_queue
+from src.utils.logging import setup_logging, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class WorkerStats:
@@ -143,7 +143,7 @@ class Worker:
         self._semaphore: Optional[asyncio.Semaphore] = None
         self.stats = WorkerStats()
 
-        self._logger = logging.getLogger(f"{__name__}.{self.worker_id}")
+        self._logger = get_logger(__name__, worker_id=self.worker_id)
 
     @property
     def is_running(self) -> bool:
@@ -634,12 +634,11 @@ async def run_worker() -> None:
     Reads configuration from environment variables and starts
     the worker. This is the main entry point for the worker process.
     """
-    # Configure logging
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    logging.basicConfig(
-        level=getattr(logging, log_level, logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    # Configure structured logging
+    settings = get_settings()
+    setup_logging(
+        log_level=settings.log_level,
+        environment=settings.environment,
     )
 
     # Read configuration
@@ -647,9 +646,7 @@ async def run_worker() -> None:
     concurrency = int(os.getenv("WORKER_CONCURRENCY", "1"))
     worker_id = os.getenv("WORKER_ID")
 
-    logger.info("=" * 60)
-    logger.info("Multi-Agent GitHub Issue Routing System - Worker")
-    logger.info("=" * 60)
+    logger.info("worker_starting", component="worker")
 
     worker = Worker(
         worker_id=worker_id,

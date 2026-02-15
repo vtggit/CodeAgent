@@ -18,6 +18,9 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from src.database.models import Base
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Module-level engine and session factory
 _engine: AsyncEngine | None = None
@@ -157,7 +160,7 @@ async def init_db() -> None:
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✓ Database initialized")
+    logger.info("database_initialized")
 
 
 async def close_db() -> None:
@@ -171,4 +174,4 @@ async def close_db() -> None:
         await _engine.dispose()
         _engine = None
         AsyncSessionLocal = None
-        print("✓ Database connections closed")
+        logger.info("database_connections_closed")

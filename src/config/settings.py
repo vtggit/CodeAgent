@@ -6,7 +6,6 @@ Supports loading from .env files, environment variables, and provides
 startup validation with clear error messages.
 """
 
-import logging
 import os
 from functools import lru_cache
 from typing import Optional, List
@@ -14,7 +13,9 @@ from typing import Optional, List
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-logger = logging.getLogger(__name__)
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class AppSettings(BaseSettings):
@@ -247,23 +248,22 @@ class AppSettings(BaseSettings):
 
     def log_configuration_summary(self) -> None:
         """Log a summary of the current configuration (without secrets)."""
-        logger.info("=" * 50)
-        logger.info("Configuration Summary")
-        logger.info("=" * 50)
-        logger.info(f"  Environment: {self.environment}")
-        logger.info(f"  Log Level: {self.log_level}")
-        logger.info(f"  Database: {self.database_url}")
-        logger.info(f"  Redis: {self.redis_url}")
-        logger.info(f"  GitHub Token: {'configured' if self.has_github_token else 'NOT SET'}")
-        logger.info(f"  Anthropic Key: {'configured' if self.has_anthropic_key else 'NOT SET'}")
-        logger.info(f"  Webhook Secret: {'configured' if self.has_webhook_secret else 'NOT SET'}")
-        logger.info(f"  Max Rounds: {self.max_rounds}")
-        logger.info(f"  Convergence Threshold: {self.convergence_threshold}")
-        logger.info(f"  Timeout: {self.timeout_minutes} minutes")
-        logger.info(f"  Cost Tracking: {'enabled' if self.enable_cost_tracking else 'disabled'}")
-        logger.info(f"  Caching: {'enabled' if self.enable_caching else 'disabled'}")
-        logger.info(f"  Label Filtering: {'enabled' if self.enable_label_filtering else 'disabled'}")
-        logger.info("=" * 50)
+        logger.info(
+            "configuration_summary",
+            environment=self.environment,
+            log_level=self.log_level,
+            database_url=self.database_url,
+            redis_url=self.redis_url,
+            github_token_configured=self.has_github_token,
+            anthropic_key_configured=self.has_anthropic_key,
+            webhook_secret_configured=self.has_webhook_secret,
+            max_rounds=self.max_rounds,
+            convergence_threshold=self.convergence_threshold,
+            timeout_minutes=self.timeout_minutes,
+            cost_tracking=self.enable_cost_tracking,
+            caching=self.enable_caching,
+            label_filtering=self.enable_label_filtering,
+        )
 
 
 # Global settings instance (cached)

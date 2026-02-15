@@ -7,15 +7,15 @@ Provides endpoints to:
 - Retrieve deliberation results
 """
 
-import logging
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel, Field
 
 from src.models.workflow import WorkflowConfig
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/deliberation",

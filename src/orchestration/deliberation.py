@@ -19,7 +19,6 @@ Key Design Decisions:
 """
 
 import asyncio
-import logging
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -28,6 +27,7 @@ from src.agents.base import BaseAgent
 from src.agents.registry import AgentRegistry
 from src.database import crud
 from src.database.engine import get_async_session
+from src.utils.logging import get_logger
 from src.models.agent import AgentDecision
 from src.models.workflow import (
     Comment,
@@ -51,7 +51,7 @@ from src.orchestration.recovery import (
 )
 from src.orchestration.synthesis import RecommendationSynthesizer, SynthesisResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DeliberationResult:
@@ -152,7 +152,7 @@ class MultiAgentDeliberationOrchestrator:
         self.convergence_detector = convergence_detector or ConvergenceDetector()
         self.default_config = config or WorkflowConfig()
         self.persist_to_db = persist_to_db
-        self._logger = logging.getLogger(f"{__name__}.Orchestrator")
+        self._logger = get_logger(__name__, component="orchestrator")
 
     async def deliberate_on_issue(
         self,
