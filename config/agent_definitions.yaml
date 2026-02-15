@@ -478,3 +478,84 @@ agents:
       memory management on mobile.
     priority: 4
     category: domain
+
+  # ============= ADDITIONAL SPECIALISTS (50+ requirement) =============
+
+  api_testing_expert:
+    type: claude_sdk_text
+    expertise: "API testing and contract validation"
+    domain_knowledge: |
+      Expert in: API testing strategies, contract testing (Pact), REST API testing (Postman, Newman),
+      GraphQL testing, load testing (k6, Locust), API mocking, response validation,
+      schema validation (JSON Schema, OpenAPI), rate limit testing, authentication flow testing,
+      integration test design.
+    priority: 6
+    category: quality
+
+  infrastructure_security:
+    type: claude_sdk_text
+    expertise: "Infrastructure security and hardening"
+    domain_knowledge: |
+      Expert in: Container security (Trivy, Snyk), Kubernetes RBAC, network policies,
+      secrets management (Vault, AWS Secrets Manager), infrastructure vulnerability scanning,
+      CIS benchmarks, security patching, audit logging, compliance automation,
+      supply chain security (SBOM, Sigstore).
+    priority: 7
+    category: infrastructure
+
+  observability_expert:
+    type: claude_sdk_text
+    expertise: "Observability and distributed tracing"
+    domain_knowledge: |
+      Expert in: Distributed tracing (OpenTelemetry, Jaeger, Zipkin), log aggregation
+      (ELK, Loki), metrics collection (Prometheus, StatsD), alerting (PagerDuty, OpsGenie),
+      SLI/SLO definition, dashboard design, anomaly detection, trace context propagation,
+      correlation IDs, observability-driven development.
+    priority: 6
+    category: infrastructure
+
+  migration_expert:
+    type: claude_sdk_text
+    expertise: "System migration and legacy modernization"
+    domain_knowledge: |
+      Expert in: Database migration strategies, API versioning and deprecation,
+      strangler fig pattern, feature flags for migration, data migration pipelines,
+      backward compatibility, zero-downtime deployment, blue-green migrations,
+      legacy system assessment, migration risk analysis.
+    priority: 5
+    category: architecture
+
+  caching_expert:
+    type: claude_sdk_text
+    expertise: "Caching strategies and distributed cache systems"
+    domain_knowledge: |
+      Expert in: Redis, Memcached, CDN caching, browser caching, HTTP cache headers,
+      cache invalidation strategies, write-through vs write-behind, cache stampede prevention,
+      distributed caching, cache warming, multi-tier caching, TTL optimization,
+      stale-while-revalidate patterns.
+    priority: 5
+    category: infrastructure
+
+  testing_automation_expert:
+    type: claude_sdk_code
+    expertise: "Test automation and CI testing infrastructure"
+    domain_knowledge: |
+      Expert in: Playwright, Cypress, Selenium for E2E testing, pytest for Python testing,
+      Jest/Vitest for JavaScript testing, test fixtures and factories, CI test parallelization,
+      flaky test detection, visual regression testing, test data management,
+      code coverage optimization, mutation testing, test reporting.
+    tools: ["Read", "Grep", "Glob", "Bash"]
+    can_edit_files: false
+    priority: 6
+    category: quality
+
+  documentation_architect:
+    type: claude_sdk_text
+    expertise: "Documentation systems architecture and developer experience"
+    domain_knowledge: |
+      Expert in: Documentation site generation (Docusaurus, MkDocs, Sphinx), API reference
+      generation, code examples and playground design, documentation versioning,
+      developer onboarding guides, architecture decision records (ADRs),
+      runbook design, changelog management, documentation testing and linting.
+    priority: 5
+    category: business
