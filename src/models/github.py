@@ -8,14 +8,22 @@ GitHub webhook events and issue information.
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from src.utils.validation import (
+    strip_control_characters,
+    MAX_ISSUE_TITLE_LENGTH,
+    MAX_ISSUE_BODY_LENGTH,
+    MAX_LABEL_COUNT,
+    MAX_LABEL_LENGTH,
+)
 
 
 class GitHubLabel(BaseModel):
     """A GitHub issue label."""
 
     id: Optional[int] = None
-    name: str
+    name: str = Field(..., max_length=MAX_LABEL_LENGTH)
     color: Optional[str] = None
     description: Optional[str] = None
 
@@ -23,7 +31,7 @@ class GitHubLabel(BaseModel):
 class GitHubUser(BaseModel):
     """A GitHub user (issue author, sender, etc.)."""
 
-    login: str
+    login: str = Field(..., max_length=256)
     id: Optional[int] = None
     avatar_url: Optional[str] = None
     html_url: Optional[str] = None
@@ -34,8 +42,8 @@ class GitHubRepository(BaseModel):
     """A GitHub repository reference."""
 
     id: Optional[int] = None
-    name: str
-    full_name: str
+    name: str = Field(..., max_length=256)
+    full_name: str = Field(..., max_length=512)
     owner: Optional[GitHubUser] = None
     html_url: Optional[str] = None
     description: Optional[str] = None
@@ -50,17 +58,30 @@ class GitHubIssue(BaseModel):
     including title, body, labels, and metadata.
     """
 
-    number: int = Field(..., description="Issue number")
-    title: str = Field(..., description="Issue title")
-    body: Optional[str] = Field(None, description="Issue body/description")
+    number: int = Field(..., ge=1, description="Issue number")
+    title: str = Field(..., max_length=MAX_ISSUE_TITLE_LENGTH, description="Issue title")
+    body: Optional[str] = Field(None, max_length=MAX_ISSUE_BODY_LENGTH, description="Issue body/description")
     state: Optional[str] = Field("open", description="Issue state (open/closed)")
     labels: list[str] = Field(
         default_factory=list,
+        max_length=MAX_LABEL_COUNT,
         description="List of label names",
     )
     url: Optional[str] = Field(None, description="HTML URL to the issue")
     created_at: Optional[datetime] = Field(None, description="Issue creation time")
     updated_at: Optional[datetime] = Field(None, description="Last update time")
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return strip_control_characters(v.strip())
+
+    @field_validator("body")
+    @classmethod
+    def clean_body(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return strip_control_characters(v)
 
     model_config = {
         "json_schema_extra": {
