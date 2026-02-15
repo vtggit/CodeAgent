@@ -607,21 +607,23 @@ class TestConfigValidation:
         assert count == 0
         assert len(registry.load_errors) == 1
 
-    def test_agent_with_code_type_falls_back(self, registry):
-        """Agent with unsupported type falls back to ClaudeTextAgent."""
+    def test_agent_with_code_type_creates_code_agent(self, registry):
+        """Agent with claude_sdk_code type creates ClaudeCodeAgent."""
+        from src.agents.claude_code_agent import ClaudeCodeAgent
+
         agents = {
             "code_agent": {
                 "type": "claude_sdk_code",
                 "expertise": "Code editing",
-                "tools": ["edit_files"],
+                "tools": ["Read", "Grep", "Glob"],
                 "can_edit_files": True,
             }
         }
         count = registry.load_from_dict(agents)
         assert count == 1
         agent = registry.get_agent("code_agent")
-        # Falls back to ClaudeTextAgent since CLAUDE_SDK_CODE isn't implemented
-        assert isinstance(agent, ClaudeTextAgent)
+        assert isinstance(agent, ClaudeCodeAgent)
+        assert agent.can_edit_files is True
 
 
 # ==================
