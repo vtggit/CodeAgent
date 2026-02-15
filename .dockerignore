@@ -1,0 +1,114 @@
+# =============================================================================
+# Docker ignore file for Multi-Agent GitHub Issue Routing System
+# Excludes unnecessary files from the Docker build context for faster builds
+# and smaller image sizes.
+# =============================================================================
+
+# Version control
+.git
+.gitignore
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test files and results
+tests/
+test_*.py
+create_test.py
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+TEST_EXECUTION_SUMMARY.md
+PLAYWRIGHT_TEST_REPORT.md
+SWAGGER_UI_TEST_REPORT.md
+test_results.json
+test_webhook_payload.json
+verify_*.mjs
+verify_*.py
+
+# Screenshots and docs (not needed in production)
+screenshots/
+screenshot_*.png
+docs/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+sdist/
+wheels/
+
+# Data files (mounted as volumes in production)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs (should be ephemeral)
+*.log
+logs/
+server.log
+server2.log
+
+# Environment files (secrets - mount at runtime)
+.env
+.env.local
+.env.*.local
+
+# Development configuration
+.claude_settings.json
+.github_project.json
+SESSION_SUMMARY.md
+
+# Docker files (no need to include in context)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+
+# Dev dependencies file (only requirements.txt needed)
+requirements-dev.txt
+
+# Package manager
+*.tar.gz
+*.pem
+*.key
+secrets/
+tmp/
+temp/
+*.tmp
+
+# Misc
+Thumbs.db
+scripts/
+gen.py
+init.sh
+start_server.sh
+README.md

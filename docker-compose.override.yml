@@ -1,0 +1,48 @@
+# =============================================================================
+# Docker Compose Override - Local Development
+# =============================================================================
+# This file is automatically loaded by Docker Compose alongside
+# docker-compose.yml, providing development-specific overrides.
+#
+# Features:
+#   - Volume mounts for hot reload (code changes reflected immediately)
+#   - Debug-level logging
+#   - Uvicorn reload mode enabled
+#   - Source code mounted into containers
+#
+# To run WITHOUT these overrides (production-like):
+#   docker compose -f docker-compose.yml up
+# =============================================================================
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Override the CMD to enable hot reload in development
+    command: >
+      uvicorn src.api.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/src
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+      # Use local data directory for easier debugging
+      - ./data:/app/data
+
+  worker:
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro

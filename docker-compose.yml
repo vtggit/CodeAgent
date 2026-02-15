@@ -1,0 +1,109 @@
+# =============================================================================
+# Multi-Agent GitHub Issue Routing System - Docker Compose
+# =============================================================================
+# Production-like configuration with all services.
+#
+# Usage:
+#   docker compose up              # Start all services
+#   docker compose up -d           # Start in background
+#   docker compose logs -f         # Follow logs
+#   docker compose down            # Stop all services
+#   docker compose down -v         # Stop and remove volumes
+#
+# For development overrides, see docker-compose.override.yml
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Redis - Message queue and caching
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: multi-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # ---------------------------------------------------------------------------
+  # Web - FastAPI application server
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multi-agent-web
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/multi_agent.db
+      - ENVIRONMENT=production
+    volumes:
+      - sqlite-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # ---------------------------------------------------------------------------
+  # Worker - Background job processor for queue processing
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multi-agent-worker
+    command: ["python", "-m", "src.orchestration.worker"]
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/multi_agent.db
+      - ENVIRONMENT=production
+    volumes:
+      - sqlite-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+# ---------------------------------------------------------------------------
+# Volumes - Persistent data storage
+# ---------------------------------------------------------------------------
+volumes:
+  redis-data:
+    driver: local
+  sqlite-data:
+    driver: local
+
+# ---------------------------------------------------------------------------
+# Networks - Service discovery
+# ---------------------------------------------------------------------------
+networks:
+  agent-network:
+    driver: bridge
+    name: multi-agent-network
