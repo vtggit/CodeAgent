@@ -52,10 +52,24 @@ class AppSettings(BaseSettings):
     # Optional: OpenAI (if using GPT models)
     openai_api_key: Optional[str] = None
     """OpenAI API key for GPT models."""
+    openai_model: str = "gpt-4o"
+    """Default OpenAI model to use."""
 
     # Optional: Local LM Studio
     lm_studio_base_url: Optional[str] = None
     """Base URL for local LM Studio instance."""
+    lm_studio_model: Optional[str] = None
+    """Model name for LM Studio local instance."""
+
+    # Optional: Ollama
+    ollama_base_url: Optional[str] = None
+    """Base URL for Ollama instance (e.g., http://localhost:11434)."""
+    ollama_model: Optional[str] = None
+    """Model name for Ollama (e.g., llama3, codellama)."""
+
+    # LLM Rate Limiting
+    llm_rate_limit_rpm: int = 60
+    """Default rate limit in requests per minute across all providers."""
 
     # ======================
     # Database Configuration
@@ -200,9 +214,28 @@ class AppSettings(BaseSettings):
         return bool(self.anthropic_api_key and self.anthropic_api_key != "sk-ant-your_anthropic_api_key_here")
 
     @property
+    def has_openai_key(self) -> bool:
+        """Check if OpenAI API key is configured."""
+        return bool(self.openai_api_key and self.openai_api_key != "sk-your_openai_api_key_here")
+
+    @property
     def has_webhook_secret(self) -> bool:
         """Check if webhook secret is configured."""
         return bool(self.github_webhook_secret and self.github_webhook_secret != "your_webhook_secret_here")
+
+    @property
+    def available_llm_providers(self) -> list[str]:
+        """List of LLM providers that have API keys configured."""
+        providers = []
+        if self.has_anthropic_key:
+            providers.append("anthropic")
+        if self.has_openai_key:
+            providers.append("openai")
+        if self.lm_studio_base_url:
+            providers.append("lm_studio")
+        if self.ollama_base_url:
+            providers.append("ollama")
+        return providers
 
     def validate_for_startup(self) -> list[str]:
         """
@@ -256,7 +289,9 @@ class AppSettings(BaseSettings):
             redis_url=self.redis_url,
             github_token_configured=self.has_github_token,
             anthropic_key_configured=self.has_anthropic_key,
+            openai_key_configured=self.has_openai_key,
             webhook_secret_configured=self.has_webhook_secret,
+            available_llm_providers=self.available_llm_providers,
             max_rounds=self.max_rounds,
             convergence_threshold=self.convergence_threshold,
             timeout_minutes=self.timeout_minutes,

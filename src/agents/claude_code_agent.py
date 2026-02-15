@@ -33,6 +33,11 @@ from tenacity import (
 )
 
 from src.agents.base import BaseAgent
+from src.integrations.llm_provider import (
+    LLMProviderManager,
+    build_model_string,
+    get_provider_manager,
+)
 from src.models.agent import AgentConfig, AgentDecision, AgentType
 from src.models.workflow import Comment, WorkflowInstance
 from src.utils.logging import get_logger
@@ -653,6 +658,12 @@ class ClaudeCodeAgent(BaseAgent):
         # Build the LLM model identifier for litellm
         self._llm_model = self._build_llm_model_string()
 
+        # Build fallback model strings
+        self._fallback_models = self._build_fallback_model_strings()
+
+        # Get the global provider manager
+        self._provider_manager: LLMProviderManager = get_provider_manager()
+
         # Determine allowed tools from config or defaults
         self._allowed_tools = config.tools if config.tools else DEFAULT_CODE_AGENT_TOOLS
 
@@ -670,10 +681,11 @@ class ClaudeCodeAgent(BaseAgent):
         self._tool_defs = get_tool_definitions(self._allowed_tools)
 
         self._logger.info(
-            "ClaudeCodeAgent initialized: model=%s, tools=%s, sandbox=%s",
+            "ClaudeCodeAgent initialized: model=%s, tools=%s, sandbox=%s, fallbacks=%s",
             self._llm_model,
             self._allowed_tools,
             self._tool_executor.sandbox_mode,
+            ", ".join(self._fallback_models) if self._fallback_models else "none",
         )
 
     @property
@@ -705,20 +717,27 @@ class ClaudeCodeAgent(BaseAgent):
         """
         Build the litellm model string from configuration.
 
+        Uses the centralized build_model_string utility for consistency.
+
         Returns:
             litellm-compatible model string
         """
-        provider = self._config.llm.provider.lower()
-        model = self._config.llm.model
+        return build_model_string(
+            self._config.llm.provider,
+            self._config.llm.model,
+        )
 
-        if provider == "anthropic":
-            return f"anthropic/{model}"
-        elif provider == "openai":
-            return f"openai/{model}"
-        elif provider in ("lm_studio", "ollama"):
-            return f"openai/{model}"
-        else:
-            return model
+    def _build_fallback_model_strings(self) -> list[str]:
+        """
+        Build litellm model strings for all configured fallback providers.
+
+        Returns:
+            List of fallback model strings
+        """
+        fallbacks = []
+        for fb in self._config.llm.fallback_providers:
+            fallbacks.append(build_model_string(fb.provider, fb.model))
+        return fallbacks
 
     async def _rate_limit(self) -> None:
         """Simple rate limiter to avoid API abuse."""
@@ -742,7 +761,11 @@ class ClaudeCodeAgent(BaseAgent):
         tools: Optional[list[dict[str, Any]]] = None,
     ) -> Any:
         """
-        Call the LLM API with retry logic and optional tool support.
+        Call the LLM API via the LLMProviderManager with retry logic
+        and optional tool support.
+
+        Uses the centralized provider manager for multi-provider support,
+        rate limiting, cost tracking, and fallback handling.
 
         Args:
             messages: Chat messages
@@ -758,18 +781,8 @@ class ClaudeCodeAgent(BaseAgent):
         """
         await self._rate_limit()
 
-        kwargs: dict[str, Any] = {
-            "model": self._llm_model,
-            "messages": messages,
-            "temperature": temperature if temperature is not None else self._config.llm.temperature,
-            "max_tokens": max_tokens if max_tokens is not None else self._config.llm.max_tokens,
-        }
-
-        if tools:
-            kwargs["tools"] = tools
-
-        if self._config.llm.base_url:
-            kwargs["api_base"] = self._config.llm.base_url
+        temp = temperature if temperature is not None else self._config.llm.temperature
+        tokens = max_tokens if max_tokens is not None else self._config.llm.max_tokens
 
         self._logger.debug(
             "Calling LLM: model=%s, messages=%d, tools=%s",
@@ -779,7 +792,15 @@ class ClaudeCodeAgent(BaseAgent):
         )
 
         try:
-            response = await litellm.acompletion(**kwargs)
+            response = await self._provider_manager.completion(
+                model=self._llm_model,
+                messages=messages,
+                temperature=temp,
+                max_tokens=tokens,
+                api_base=self._config.llm.base_url,
+                tools=tools,
+                fallback_models=self._fallback_models if self._fallback_models else None,
+            )
             return response
         except Exception as e:
             self._logger.error("LLM call failed: %s", str(e))

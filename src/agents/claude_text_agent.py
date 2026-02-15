@@ -25,6 +25,11 @@ from tenacity import (
 )
 
 from src.agents.base import BaseAgent
+from src.integrations.llm_provider import (
+    LLMProviderManager,
+    build_model_string,
+    get_provider_manager,
+)
 from src.models.agent import AgentConfig, AgentDecision, AgentType
 from src.models.workflow import Comment, WorkflowInstance
 from src.utils.logging import get_logger
@@ -40,16 +45,18 @@ class ClaudeTextAgent(BaseAgent):
     """
     Text-only agent using LLM for reasoning and analysis.
 
-    This agent uses litellm to call LLM APIs (Anthropic Claude, OpenAI, etc.)
-    with no tools enabled. It's designed for pure reasoning tasks where agents
-    analyze issues and provide expert recommendations.
+    This agent uses litellm (via LLMProviderManager) to call LLM APIs
+    (Anthropic Claude, OpenAI, local models, etc.) with no tools enabled.
+    It's designed for pure reasoning tasks where agents analyze issues and
+    provide expert recommendations.
 
     Features:
     - Configurable LLM provider and model via AgentConfig
+    - Multi-provider support with automatic fallback via LLMProviderManager
+    - Per-provider rate limiting and cost tracking
     - Automatic retry with exponential backoff for API failures
-    - Rate limiting to prevent API abuse
     - Structured decision-making for should_comment/generate_comment
-    - Cost tracking support (when enabled)
+    - Provider health monitoring
     """
 
     def __init__(self, config: AgentConfig) -> None:
@@ -61,49 +68,58 @@ class ClaudeTextAgent(BaseAgent):
         """
         super().__init__(config)
 
-        # Track API usage for rate limiting
+        # Track API usage for rate limiting (kept as secondary limiter)
         self._last_call_time: float = 0.0
         self._min_call_interval: float = 0.5  # seconds between API calls
 
         # Build the LLM model identifier for litellm
         self._llm_model = self._build_llm_model_string()
 
+        # Build fallback model strings
+        self._fallback_models = self._build_fallback_model_strings()
+
+        # Get the global provider manager
+        self._provider_manager: LLMProviderManager = get_provider_manager()
+
         self._logger.info(
-            "ClaudeTextAgent initialized with model: %s", self._llm_model
+            "ClaudeTextAgent initialized with model: %s (fallbacks: %s)",
+            self._llm_model,
+            ", ".join(self._fallback_models) if self._fallback_models else "none",
         )
 
     def _build_llm_model_string(self) -> str:
         """
         Build the litellm model string from configuration.
 
-        litellm uses provider/model format for routing, e.g.:
-        - "anthropic/claude-sonnet-4-5-20250929"
-        - "openai/gpt-4"
-        - "openai/local-model" (with custom base_url for LM Studio)
+        Uses the centralized build_model_string utility for consistency.
 
         Returns:
             litellm-compatible model string
         """
-        provider = self._config.llm.provider.lower()
-        model = self._config.llm.model
+        return build_model_string(
+            self._config.llm.provider,
+            self._config.llm.model,
+        )
 
-        if provider == "anthropic":
-            # Anthropic models work directly in litellm
-            return f"anthropic/{model}"
-        elif provider == "openai":
-            return f"openai/{model}"
-        elif provider in ("lm_studio", "ollama"):
-            # Local models use openai-compatible format
-            return f"openai/{model}"
-        else:
-            # Default: try the model name directly
-            return model
+    def _build_fallback_model_strings(self) -> list[str]:
+        """
+        Build litellm model strings for all configured fallback providers.
+
+        Returns:
+            List of fallback model strings
+        """
+        fallbacks = []
+        for fb in self._config.llm.fallback_providers:
+            fallbacks.append(build_model_string(fb.provider, fb.model))
+        return fallbacks
 
     async def _rate_limit(self) -> None:
         """
         Simple rate limiter to avoid API abuse.
 
         Ensures minimum interval between API calls.
+        This is a secondary limiter; the LLMProviderManager also
+        enforces per-provider rate limits.
         """
         now = time.time()
         elapsed = now - self._last_call_time
@@ -124,10 +140,11 @@ class ClaudeTextAgent(BaseAgent):
         max_tokens: Optional[int] = None,
     ) -> str:
         """
-        Call the LLM API with retry logic.
+        Call the LLM API via the LLMProviderManager with retry logic.
 
-        Uses litellm for multi-provider support. Retries up to 3 times
-        with exponential backoff on failures.
+        Uses the centralized provider manager for multi-provider support,
+        rate limiting, cost tracking, and fallback handling. Retries up to
+        3 times with exponential backoff on failures.
 
         Args:
             messages: Chat messages in OpenAI format
@@ -142,27 +159,25 @@ class ClaudeTextAgent(BaseAgent):
         """
         await self._rate_limit()
 
-        # Build kwargs for litellm
-        kwargs: dict[str, Any] = {
-            "model": self._llm_model,
-            "messages": messages,
-            "temperature": temperature if temperature is not None else self._config.llm.temperature,
-            "max_tokens": max_tokens if max_tokens is not None else self._config.llm.max_tokens,
-        }
-
-        # Add base_url for local models
-        if self._config.llm.base_url:
-            kwargs["api_base"] = self._config.llm.base_url
+        temp = temperature if temperature is not None else self._config.llm.temperature
+        tokens = max_tokens if max_tokens is not None else self._config.llm.max_tokens
 
         self._logger.debug(
             "Calling LLM: model=%s, messages=%d, temp=%.2f",
             self._llm_model,
             len(messages),
-            kwargs["temperature"],
+            temp,
         )
 
         try:
-            response = await litellm.acompletion(**kwargs)
+            response = await self._provider_manager.completion(
+                model=self._llm_model,
+                messages=messages,
+                temperature=temp,
+                max_tokens=tokens,
+                api_base=self._config.llm.base_url,
+                fallback_models=self._fallback_models if self._fallback_models else None,
+            )
             content = response.choices[0].message.content
 
             self._logger.debug(

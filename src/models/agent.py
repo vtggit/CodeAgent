@@ -20,12 +20,34 @@ class AgentType(str, Enum):
     CUSTOM = "custom"
 
 
+class FallbackProviderConfig(BaseModel):
+    """
+    Configuration for a fallback LLM provider.
+
+    Used when the primary provider fails or is unavailable.
+    """
+
+    provider: str = Field(
+        ...,
+        description="Fallback provider name (anthropic, openai, lm_studio, ollama)",
+    )
+    model: str = Field(
+        ...,
+        description="Fallback model identifier",
+    )
+    base_url: Optional[str] = Field(
+        None,
+        description="Custom API base URL for fallback provider",
+    )
+
+
 class LLMProviderConfig(BaseModel):
     """
     LLM provider configuration for an agent.
 
     Each agent can use a different LLM provider and model based on
     task complexity, cost, privacy, and performance requirements.
+    Supports fallback providers for reliability.
     """
 
     provider: str = Field(
@@ -51,6 +73,18 @@ class LLMProviderConfig(BaseModel):
         ge=1,
         le=200000,
         description="Maximum tokens in response",
+    )
+
+    # Multi-provider support
+    fallback_providers: list[FallbackProviderConfig] = Field(
+        default_factory=list,
+        description="Ordered list of fallback providers to try if primary fails",
+    )
+    rate_limit_rpm: Optional[int] = Field(
+        None,
+        ge=1,
+        le=10000,
+        description="Rate limit in requests per minute (overrides provider default)",
     )
 
 
