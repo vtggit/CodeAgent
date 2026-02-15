@@ -10,10 +10,17 @@ Provides endpoints to:
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.models.workflow import WorkflowConfig
 from src.utils.logging import get_logger
+from src.utils.validation import (
+    strip_control_characters,
+    MAX_ISSUE_TITLE_LENGTH,
+    MAX_ISSUE_BODY_LENGTH,
+    MAX_LABEL_COUNT,
+    MAX_LABEL_LENGTH,
+)
 
 logger = get_logger(__name__)
 
@@ -30,14 +37,50 @@ _active_deliberations: dict = {}
 class DeliberationRequest(BaseModel):
     """Request to trigger a deliberation on an issue."""
 
-    issue_number: int = Field(..., description="GitHub issue number")
-    issue_title: str = Field(..., description="GitHub issue title")
-    issue_body: str = Field("", description="GitHub issue body/description")
-    issue_labels: list[str] = Field(default_factory=list, description="Issue labels")
+    issue_number: int = Field(..., ge=1, description="GitHub issue number")
+    issue_title: str = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_ISSUE_TITLE_LENGTH,
+        description="GitHub issue title",
+    )
+    issue_body: str = Field(
+        "",
+        max_length=MAX_ISSUE_BODY_LENGTH,
+        description="GitHub issue body/description",
+    )
+    issue_labels: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LABEL_COUNT,
+        description="Issue labels",
+    )
     max_rounds: int = Field(10, ge=1, le=50, description="Maximum rounds")
     convergence_threshold: float = Field(
         0.8, ge=0.0, le=1.0, description="Convergence threshold"
     )
+
+    @field_validator("issue_title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        """Strip control characters from title."""
+        return strip_control_characters(v.strip())
+
+    @field_validator("issue_body")
+    @classmethod
+    def clean_body(cls, v: str) -> str:
+        """Strip control characters from body."""
+        return strip_control_characters(v.strip())
+
+    @field_validator("issue_labels")
+    @classmethod
+    def clean_labels(cls, v: list[str]) -> list[str]:
+        """Validate and clean labels."""
+        cleaned = []
+        for label in v:
+            label = strip_control_characters(label.strip())
+            if label and len(label) <= MAX_LABEL_LENGTH:
+                cleaned.append(label)
+        return cleaned
 
 
 class DeliberationTriggerResponse(BaseModel):

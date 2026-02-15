@@ -18,6 +18,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.utils.webhook import validate_github_signature, extract_issue_data
+from src.utils.validation import (
+    validate_webhook_payload_size,
+    validate_issue_title,
+    validate_issue_body,
+    validate_labels,
+    ValidationError as InputValidationError,
+    InputTooLongError,
+    MaliciousInputError,
+)
 from src.queue.base import BaseQueue, QueueJob
 from src.config.settings import get_settings
 
@@ -81,6 +90,15 @@ async def github_webhook(
     # Read raw body for signature validation
     raw_body = await request.body()
 
+    # Validate payload size (DOS protection)
+    try:
+        validate_webhook_payload_size(raw_body)
+    except InputTooLongError:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Webhook payload exceeds maximum allowed size",
+        )
+
     # Get webhook secret from configuration
     app_settings = get_settings()
     webhook_secret = app_settings.github_webhook_secret
@@ -140,6 +158,34 @@ async def github_webhook(
             status="ignored",
             message=f"Action '{action}' not processed",
             processed_in_ms=elapsed_ms,
+        )
+
+    # Validate and sanitize issue data
+    try:
+        if "issue_title" in issue_data:
+            issue_data["issue_title"] = validate_issue_title(
+                issue_data["issue_title"]
+            )
+        if "issue_body" in issue_data:
+            issue_data["issue_body"] = validate_issue_body(
+                issue_data["issue_body"]
+            )
+        if "labels" in issue_data and isinstance(issue_data["labels"], list):
+            issue_data["labels"] = validate_labels(issue_data["labels"])
+    except MaliciousInputError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Input validation failed: {e}",
+        )
+    except InputTooLongError as e:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Input too long: {e}",
+        )
+    except InputValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Validation error: {e}",
         )
 
     # Queue for async processing using Redis/Memory queue
