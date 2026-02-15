@@ -5,12 +5,15 @@ This module sets up the main FastAPI application with health checks,
 error handling, and basic endpoints.
 """
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Dict, Optional
+import asyncio
 import sys
+import time
 from pathlib import Path
 
 # Add src to path for imports
@@ -74,13 +77,23 @@ app.include_router(deliberation_router)
 
 
 # Response models
+class ComponentStatus(BaseModel):
+    """Status of a single system component."""
+
+    status: str  # "healthy", "unhealthy", "degraded"
+    message: Optional[str] = None
+    response_time_ms: Optional[float] = None
+
+
 class HealthResponse(BaseModel):
     """Health check response model."""
 
-    status: str
+    status: str  # "healthy", "unhealthy", "degraded"
     version: str
     timestamp: str
     service: str
+    components: Optional[Dict[str, ComponentStatus]] = None
+    response_time_ms: Optional[float] = None
 
 
 class InfoResponse(BaseModel):
@@ -112,60 +125,214 @@ async def root() -> InfoResponse:
     )
 
 
-# Health check endpoint
+# ---------------------------------------------------------------------------
+# Health / Readiness helpers
+# ---------------------------------------------------------------------------
+
+async def _check_database() -> ComponentStatus:
+    """Check database connectivity by executing a simple query."""
+    start = time.perf_counter()
+    try:
+        from src.database.engine import get_engine
+        engine = get_engine()
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        elapsed = (time.perf_counter() - start) * 1000
+        return ComponentStatus(status="healthy", response_time_ms=round(elapsed, 1))
+    except Exception as exc:
+        elapsed = (time.perf_counter() - start) * 1000
+        return ComponentStatus(
+            status="unhealthy",
+            message=str(exc)[:200],
+            response_time_ms=round(elapsed, 1),
+        )
+
+
+async def _check_queue() -> ComponentStatus:
+    """Check queue backend connectivity."""
+    start = time.perf_counter()
+    try:
+        from src.api.webhooks import get_queue
+        queue = get_queue()
+        healthy = await queue.health_check()
+        elapsed = (time.perf_counter() - start) * 1000
+        queue_type = type(queue).__name__
+        if healthy:
+            return ComponentStatus(
+                status="healthy",
+                message=queue_type,
+                response_time_ms=round(elapsed, 1),
+            )
+        else:
+            return ComponentStatus(
+                status="unhealthy",
+                message=f"{queue_type}: connection failed",
+                response_time_ms=round(elapsed, 1),
+            )
+    except RuntimeError:
+        # Queue not initialized yet
+        elapsed = (time.perf_counter() - start) * 1000
+        return ComponentStatus(
+            status="unhealthy",
+            message="Queue not initialized",
+            response_time_ms=round(elapsed, 1),
+        )
+    except Exception as exc:
+        elapsed = (time.perf_counter() - start) * 1000
+        return ComponentStatus(
+            status="unhealthy",
+            message=str(exc)[:200],
+            response_time_ms=round(elapsed, 1),
+        )
+
+
+async def _check_agent_registry() -> ComponentStatus:
+    """Check that agent registry is loaded with agents."""
+    start = time.perf_counter()
+    try:
+        registry = get_agent_registry()
+        agents = registry.get_all_agents()
+        count = len(agents)
+        elapsed = (time.perf_counter() - start) * 1000
+        if count > 0:
+            return ComponentStatus(
+                status="healthy",
+                message=f"{count} agents loaded",
+                response_time_ms=round(elapsed, 1),
+            )
+        else:
+            return ComponentStatus(
+                status="degraded",
+                message="No agents loaded",
+                response_time_ms=round(elapsed, 1),
+            )
+    except RuntimeError:
+        elapsed = (time.perf_counter() - start) * 1000
+        return ComponentStatus(
+            status="unhealthy",
+            message="Agent registry not initialized",
+            response_time_ms=round(elapsed, 1),
+        )
+    except Exception as exc:
+        elapsed = (time.perf_counter() - start) * 1000
+        return ComponentStatus(
+            status="unhealthy",
+            message=str(exc)[:200],
+            response_time_ms=round(elapsed, 1),
+        )
+
+
+def _overall_status(components: Dict[str, ComponentStatus]) -> str:
+    """Determine overall status from component statuses."""
+    statuses = {c.status for c in components.values()}
+    if "unhealthy" in statuses:
+        return "unhealthy"
+    if "degraded" in statuses:
+        return "degraded"
+    return "healthy"
+
+
+# Health check endpoint (lightweight — liveness probe)
 @app.get(
     "/health",
     response_model=HealthResponse,
-    status_code=status.HTTP_200_OK,
     tags=["Health"],
+    responses={
+        200: {"description": "Service is healthy"},
+        503: {"description": "Service is unhealthy"},
+    },
 )
-async def health_check() -> HealthResponse:
+async def health_check(response: Response) -> HealthResponse:
     """
-    Health check endpoint.
+    Liveness health check endpoint.
 
-    Returns the current health status of the service. This endpoint
-    can be used by load balancers, monitoring tools, and orchestration
-    systems to verify service availability.
+    Returns the current health status of the service **including**
+    component-level status for database, queue, and agent registry.
+    Suitable for load balancers, Docker HEALTHCHECK, and Kubernetes
+    liveness probes.
 
-    Returns:
-        HealthResponse: Current service health status
+    Returns 200 if all critical components are healthy, 503 otherwise.
     """
+    start = time.perf_counter()
+
+    # Run all checks concurrently for speed
+    db_status, queue_status, registry_status = await asyncio.gather(
+        _check_database(),
+        _check_queue(),
+        _check_agent_registry(),
+    )
+
+    components = {
+        "database": db_status,
+        "queue": queue_status,
+        "agent_registry": registry_status,
+    }
+
+    overall = _overall_status(components)
+    elapsed = (time.perf_counter() - start) * 1000
+
+    if overall == "unhealthy":
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
     return HealthResponse(
-        status="healthy",
+        status=overall,
         version=__version__,
         timestamp=datetime.utcnow().isoformat() + "Z",
         service="multi-agent-github-router",
+        components=components,
+        response_time_ms=round(elapsed, 1),
     )
 
 
-# Readiness check endpoint
+# Readiness check endpoint (heavier — readiness probe)
 @app.get(
     "/ready",
     response_model=HealthResponse,
-    status_code=status.HTTP_200_OK,
     tags=["Health"],
+    responses={
+        200: {"description": "Service is ready to accept traffic"},
+        503: {"description": "Service is not ready"},
+    },
 )
-async def readiness_check() -> HealthResponse:
+async def readiness_check(response: Response) -> HealthResponse:
     """
     Readiness check endpoint.
 
     Indicates whether the service is ready to accept traffic.
-    Unlike /health, this endpoint checks dependencies like
-    database and Redis connections.
+    Checks all dependencies: database, queue, and agent registry.
+    Used by Kubernetes readiness probes and load balancers.
 
-    Returns:
-        HealthResponse: Service readiness status
+    Returns 200 only when ALL components are healthy.
     """
-    # TODO: Add actual readiness checks for:
-    # - Database connection
-    # - Redis connection
-    # - Agent registry loaded
+    start = time.perf_counter()
+
+    db_status, queue_status, registry_status = await asyncio.gather(
+        _check_database(),
+        _check_queue(),
+        _check_agent_registry(),
+    )
+
+    components = {
+        "database": db_status,
+        "queue": queue_status,
+        "agent_registry": registry_status,
+    }
+
+    overall = _overall_status(components)
+    elapsed = (time.perf_counter() - start) * 1000
+
+    # Readiness requires all components healthy (degraded → not ready)
+    if overall != "healthy":
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return HealthResponse(
-        status="ready",
+        status="ready" if overall == "healthy" else "not_ready",
         version=__version__,
         timestamp=datetime.utcnow().isoformat() + "Z",
         service="multi-agent-github-router",
+        components=components,
+        response_time_ms=round(elapsed, 1),
     )
 
 
