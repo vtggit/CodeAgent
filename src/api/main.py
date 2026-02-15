@@ -414,6 +414,58 @@ async def get_agent_detail(agent_name: str):
     return agent.to_dict()
 
 
+# LLM Provider endpoints
+@app.get("/llm/status", tags=["LLM Providers"])
+async def llm_provider_status():
+    """
+    Get status of all configured LLM providers.
+
+    Returns health status, cost tracking data, and rate limit
+    information for all LLM providers being used by the system.
+    """
+    from src.integrations.llm_provider import get_provider_manager
+    manager = get_provider_manager()
+    return manager.get_full_status()
+
+
+@app.get("/llm/health", tags=["LLM Providers"])
+async def llm_provider_health():
+    """
+    Get health status of LLM providers.
+
+    Returns per-provider health including success/failure counts,
+    consecutive failures, and average latency.
+    """
+    from src.integrations.llm_provider import get_provider_manager
+    manager = get_provider_manager()
+    return {"providers": manager.get_provider_health()}
+
+
+@app.get("/llm/costs", tags=["LLM Providers"])
+async def llm_provider_costs():
+    """
+    Get cost tracking summary for LLM providers.
+
+    Returns total costs, costs broken down by provider and model,
+    and total token usage. Only available when cost tracking is enabled.
+    """
+    from src.integrations.llm_provider import get_provider_manager
+    manager = get_provider_manager()
+    return manager.get_cost_summary()
+
+
+@app.get("/llm/rate-limits", tags=["LLM Providers"])
+async def llm_rate_limits():
+    """
+    Get current rate limit status for LLM providers.
+
+    Returns the configured rate limits and current usage per provider.
+    """
+    from src.integrations.llm_provider import get_provider_manager
+    manager = get_provider_manager()
+    return {"rate_limits": manager.get_rate_limit_status()}
+
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception) -> JSONResponse:
